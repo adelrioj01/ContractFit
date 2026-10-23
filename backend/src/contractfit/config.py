@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     seed_demo_data: bool = True
     upload_directory: str = "data/uploads"
     upload_max_bytes: int = 20 * 1024 * 1024
+    processing_mode: Literal["inline", "redis"] = "inline"
+    processing_queue_name: str = "contractfit:document-jobs"
+    ocr_backend: Literal["disabled", "tesseract"] = "disabled"
+    tesseract_command: str = "tesseract"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

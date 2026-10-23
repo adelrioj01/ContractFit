@@ -20,6 +20,20 @@ class DocumentStatus(StrEnum):
     FAILED = "failed"
 
 
+class ProcessingJobStatus(StrEnum):
+    QUEUED = "queued"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    NEEDS_REVIEW = "needs_review"
+    FAILED = "failed"
+
+
+class ProcessingStage(StrEnum):
+    PARSING = "parsing"
+    OCR = "ocr"
+    EXTRACTION = "extraction"
+
+
 class Evidence(BaseModel):
     document_id: UUID
     page: int | None = Field(default=None, ge=1)
@@ -47,6 +61,18 @@ class DocumentPage(BaseModel):
     page_number: int = Field(ge=1)
     text: str
     needs_ocr: bool = False
+
+
+class ProcessingJob(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
+    document_id: UUID
+    status: ProcessingJobStatus = ProcessingJobStatus.QUEUED
+    stage: ProcessingStage = ProcessingStage.PARSING
+    attempts: int = Field(default=0, ge=0)
+    max_attempts: int = Field(default=3, ge=1)
+    error_message: str | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class Requirement(BaseModel):

@@ -16,8 +16,34 @@ services:
       SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
       UPLOAD_DIRECTORY: ${UPLOAD_DIRECTORY:-/app/data/uploads}
       UPLOAD_MAX_BYTES: ${UPLOAD_MAX_BYTES:-20971520}
+      PROCESSING_MODE: ${PROCESSING_MODE:-redis}
+      PROCESSING_QUEUE_NAME: ${PROCESSING_QUEUE_NAME:-contractfit:document-jobs}
+      OCR_BACKEND: ${OCR_BACKEND:-tesseract}
+      TESSERACT_COMMAND: ${TESSERACT_COMMAND:-tesseract}
     ports:
       - "8000:8000"
+    volumes:
+      - uploads_data:/app/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ./backend
+    command: ["python", "-m", "contractfit.worker"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://contractfit:contractfit@postgres:5432/contractfit}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      STORAGE_BACKEND: postgres
+      UPLOAD_DIRECTORY: ${UPLOAD_DIRECTORY:-/app/data/uploads}
+      UPLOAD_MAX_BYTES: ${UPLOAD_MAX_BYTES:-20971520}
+      PROCESSING_MODE: redis
+      PROCESSING_QUEUE_NAME: ${PROCESSING_QUEUE_NAME:-contractfit:document-jobs}
+      OCR_BACKEND: ${OCR_BACKEND:-tesseract}
+      TESSERACT_COMMAND: ${TESSERACT_COMMAND:-tesseract}
     volumes:
       - uploads_data:/app/data/uploads
     depends_on:

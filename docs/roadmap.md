@@ -9,8 +9,8 @@
 - [x] Ranked opportunity dashboard and JSON API.
 - [x] Three-case labeled evaluation harness and CI coverage.
 
-The current hardening target is background processing and OCR. Persistence and the first manual
-document-ingestion workflow are now implemented end to end.
+The current hardening target is human review and external opportunity ingestion. Persistence,
+manual document ingestion, background processing and OCR are implemented end to end.
 
 ## Implemented persistence foundation
 - [x] SQLAlchemy models for contractor profiles, source documents, opportunities, and requirements.
@@ -40,12 +40,12 @@ document-ingestion workflow are now implemented end to end.
 - SAM.gov adapter.
 - [x] Secure attachment storage, SHA-256 hashing and deduplication.
 - Amendment snapshots and version history.
-- Retryable background processing.
+- [x] Durable, retryable Redis-backed background processing.
 
 ## Phase 4: document intelligence
 - [x] Text PDF, Word and plain-text parsing.
 - [x] Requirement extraction with page-level evidence.
-- OCR execution for scanned PDFs (low-text pages are already detected and flagged).
+- [x] Local Tesseract OCR for scanned PDF pages.
 - Excel attachment parsing.
 - Review queue for low-confidence fields.
 

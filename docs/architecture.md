@@ -13,8 +13,9 @@ reproducible.
 
 Uploaded files are content-addressed by SHA-256 and stored outside the database. Parsed text is
 persisted per page, which lets every extracted requirement cite a stable document and page. Pages
-with insufficient embedded text are marked `needs_ocr`; running an OCR engine is the next document
-intelligence milestone.
+with insufficient embedded text are marked `needs_ocr` and rendered for local Tesseract OCR.
+Durable `ProcessingJob` records and a Redis queue move parsing, OCR and extraction outside the API
+process; a separate worker retries failures and recovers unfinished jobs after restart.
 
 ## Persistence boundary
 

@@ -54,6 +54,9 @@ class SourceDocumentRecord(Base):
     pages: Mapped[list["DocumentPageRecord"]] = relationship(
         back_populates="document", cascade="all, delete-orphan"
     )
+    processing_jobs: Mapped[list["ProcessingJobRecord"]] = relationship(
+        back_populates="document", cascade="all, delete-orphan"
+    )
 
 
 class DocumentPageRecord(Base):
@@ -70,6 +73,23 @@ class DocumentPageRecord(Base):
     text: Mapped[str] = mapped_column(Text)
     needs_ocr: Mapped[bool] = mapped_column(default=False)
     document: Mapped[SourceDocumentRecord] = relationship(back_populates="pages")
+
+
+class ProcessingJobRecord(Base):
+    __tablename__ = "processing_jobs"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    document_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("source_documents.id", ondelete="CASCADE"), index=True
+    )
+    status: Mapped[str] = mapped_column(String(50), index=True)
+    stage: Mapped[str] = mapped_column(String(50))
+    attempts: Mapped[int] = mapped_column(default=0)
+    max_attempts: Mapped[int] = mapped_column(default=3)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    document: Mapped[SourceDocumentRecord] = relationship(back_populates="processing_jobs")
 
 
 class OpportunityRecord(Base):

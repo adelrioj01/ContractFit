@@ -44,13 +44,15 @@ const finiteNumber=(value,fallback=0)=>Number.isFinite(Number(value))?Number(val
 async function json(response){if(!response.ok)throw new Error(`Request failed (${response.status})`);return response.json()}
 async function load(){
   try{
-    const[p,o,m,e]=await Promise.all([
+    const[p,o,m,e,jobs]=await Promise.all([
       fetch('/api/profile').then(json),
       fetch('/api/opportunities').then(json),
       fetch('/api/matches').then(json),
-      fetch('/api/evaluation').then(json)
+      fetch('/api/evaluation').then(json),
+      fetch('/api/processing-jobs').then(json)
     ]);
-    document.querySelector('#summary').innerHTML=`<article class="card"><div class="eyebrow">Contractor</div><h3>${esc(p.name)}</h3><p>${esc(p.capability_statement)}</p></article><article class="card"><div class="eyebrow">Pipeline</div><div class="score">${finiteNumber(o.length)}</div><p>opportunities evaluated</p></article><article class="card"><div class="eyebrow">Evaluation</div><div class="score">${Math.round(finiteNumber(e.eligibility_accuracy)*100)}%</div><p>eligibility accuracy · ${Math.round(finiteNumber(e.citation_validity)*100)}% valid citations</p></article>`;
+    const activeJobs=jobs.filter(job=>['queued','processing'].includes(job.status)).length;
+    document.querySelector('#summary').innerHTML=`<article class="card"><div class="eyebrow">Contractor</div><h3>${esc(p.name)}</h3><p>${esc(p.capability_statement)}</p></article><article class="card"><div class="eyebrow">Pipeline</div><div class="score">${finiteNumber(o.length)}</div><p>opportunities evaluated</p></article><article class="card"><div class="eyebrow">Processing</div><div class="score">${activeJobs}</div><p>active document jobs</p></article><article class="card"><div class="eyebrow">Evaluation</div><div class="score">${Math.round(finiteNumber(e.eligibility_accuracy)*100)}%</div><p>eligibility accuracy · ${Math.round(finiteNumber(e.citation_validity)*100)}% valid citations</p></article>`;
     const byId=Object.fromEntries(o.map(item=>[item.id,item]));
     const cards=m.sort((a,b)=>finiteNumber(b.fit_score)-finiteNumber(a.fit_score)).map(match=>{
       const opportunity=byId[match.opportunity_id]??{};
@@ -73,6 +75,19 @@ function setUploadState(message,kind=''){
   const status=document.querySelector('#upload-status');
   status.textContent=message;
   status.dataset.kind=kind;
+}
+
+const wait=milliseconds=>new Promise(resolve=>setTimeout(resolve,milliseconds));
+async function waitForJob(jobId,filename){
+  for(let attempt=0;attempt<120;attempt+=1){
+    const job=await fetch(`/api/processing-jobs/${encodeURIComponent(jobId)}`).then(json);
+    if(job.status==='completed')return job;
+    if(job.status==='needs_review')return job;
+    if(job.status==='failed')throw new Error(job.error_message||`${filename} processing failed.`);
+    setUploadState(`${filename}: ${job.stage} (${job.status})…`);
+    await wait(1000);
+  }
+  throw new Error(`${filename} is still processing. Refresh the dashboard to check its status.`);
 }
 
 function uploadDocument(event){
@@ -119,7 +134,11 @@ function uploadDocument(event){
       const pages=finiteNumber(document.page_count);
       const duplicate=payload?.duplicate?' Existing document reused.':'';
       const opportunity=payload?.opportunity?.title?` Opportunity: ${payload.opportunity.title}.`:'';
-      setUploadState(`${name} is ${document.status||'ready'}${pages?` (${pages} page${pages===1?'':'s'})`:''}.${duplicate}${opportunity}`,'success');
+      let finalJob=payload?.job;
+      if(finalJob?.id&&['queued','processing'].includes(finalJob.status))finalJob=await waitForJob(finalJob.id,name);
+      const finalStatus=finalJob?.status||document.status||'ready';
+      const kind=finalStatus==='needs_review'?'error':'success';
+      setUploadState(`${name} is ${finalStatus}${pages?` (${pages} page${pages===1?'':'s'})`:''}.${duplicate}${opportunity}`,kind);
       form.reset();
       await load();
     }catch(error){setUploadState(error instanceof Error?error.message:'The document could not be uploaded.','error')}

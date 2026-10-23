@@ -74,6 +74,8 @@ This repository now contains a working vertical-slice MVP:
 - A realistic facilities-contractor profile and editable profile API
 - PDF, DOCX and TXT solicitation upload with secure hash-addressed storage and deduplication
 - Page-oriented parsing with evidence-preserving requirement extraction and OCR flags
+- Durable Redis-backed processing jobs with retries and a separate worker
+- Local Tesseract OCR for scanned PDF pages
 - Deterministic deadline, territory, set-aside, certification, and capacity gates
 - Hybrid fit scoring with an optional local Ollama model and an offline fallback
 - An explainable ranked-opportunity dashboard at `http://localhost:8000`
@@ -84,6 +86,9 @@ Useful API routes:
 - `POST /api/documents/upload`
 - `GET /api/documents`
 - `GET /api/documents/{document_id}/pages`
+- `GET /api/processing-jobs`
+- `GET /api/processing-jobs/{job_id}`
+- `POST /api/processing-jobs/{job_id}/retry`
 - `POST /api/opportunities/import-text`
 - `GET /api/opportunities`
 - `GET /api/matches`
@@ -93,6 +98,9 @@ Useful API routes:
 The default `AI_PROVIDER=offline` makes development deterministic. To exercise local-model
 scoring, run Ollama, download the configured model, and set `AI_PROVIDER=ollama` in `.env`.
 The matching service falls back safely if the local model is unavailable.
+
+Docker Compose runs document parsing, OCR and extraction in the `worker` service. Direct backend
+development defaults to `PROCESSING_MODE=inline`, keeping tests and one-process demos simple.
 
 ## Persistence
 
