@@ -14,8 +14,12 @@ services:
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
       STORAGE_BACKEND: ${STORAGE_BACKEND:-postgres}
       SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+      UPLOAD_DIRECTORY: ${UPLOAD_DIRECTORY:-/app/data/uploads}
+      UPLOAD_MAX_BYTES: ${UPLOAD_MAX_BYTES:-20971520}
     ports:
       - "8000:8000"
+    volumes:
+      - uploads_data:/app/data/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -50,3 +54,4 @@ services:
 
 volumes:
   postgres_data:
+  uploads_data:

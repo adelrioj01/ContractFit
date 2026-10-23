@@ -9,9 +9,8 @@
 - [x] Ranked opportunity dashboard and JSON API.
 - [x] Three-case labeled evaluation harness and CI coverage.
 
-The next hardening target is persistence and document parsing; the current in-memory store is
-intentional so the product logic can be validated before migrations and infrastructure dominate
-the work.
+The current hardening target is background processing and OCR. Persistence and the first manual
+document-ingestion workflow are now implemented end to end.
 
 ## Implemented persistence foundation
 - [x] SQLAlchemy models for contractor profiles, source documents, opportunities, and requirements.
@@ -37,14 +36,17 @@ the work.
 - Editable structured onboarding.
 
 ## Phase 3: ingestion
-- Manual opportunity upload.
+- [x] Manual PDF, DOCX and TXT opportunity upload.
 - SAM.gov adapter.
-- Attachment hashing, deduplication and snapshots.
+- [x] Secure attachment storage, SHA-256 hashing and deduplication.
+- Amendment snapshots and version history.
 - Retryable background processing.
 
 ## Phase 4: document intelligence
-- PDF, scanned PDF, Word and Excel parsing.
-- Requirement extraction with page-level evidence.
+- [x] Text PDF, Word and plain-text parsing.
+- [x] Requirement extraction with page-level evidence.
+- OCR execution for scanned PDFs (low-text pages are already detected and flagged).
+- Excel attachment parsing.
 - Review queue for low-confidence fields.
 
 ## Phase 5: matching
