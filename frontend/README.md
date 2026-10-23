@@ -7,8 +7,8 @@ The first document-ingestion workflow currently lives in the FastAPI-served dash
 1. The user selects a PDF, DOCX, or TXT solicitation.
 2. The browser sends it as multipart form data to `POST /api/documents/upload` using the `file` field.
 3. The interface displays upload progress and remains disabled while the request is active.
-4. The API returns document metadata, duplicate status, and an extracted opportunity when available.
-5. The interface reports success or failure accessibly and refreshes the opportunity pipeline and match ranking.
+4. The API returns document metadata and a durable processing-job identifier.
+5. The interface polls the job through parsing, OCR and extraction, then refreshes the opportunity pipeline and match ranking.
 
 The upload control restricts the file picker to supported formats, but the API remains responsible for authoritative content-type, extension, size, and document validation.
 

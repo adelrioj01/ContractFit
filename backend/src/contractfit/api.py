@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 from uuid import UUID, uuid4
@@ -6,32 +7,46 @@ from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 
 from contractfit.config import get_settings
-from contractfit.document_parser import DocumentParseError, DocumentParser
 from contractfit.domain import (
     CompanyProfile,
     DocumentPage,
     DocumentStatus,
     MatchResult,
     Opportunity,
+    ProcessingJob,
+    ProcessingJobStatus,
+    ProcessingStage,
     SourceDocument,
 )
 from contractfit.evaluation import EvaluationCase, EvaluationReport, evaluate
 from contractfit.evaluation_dataset import EVALUATION_CASES
 from contractfit.extraction import RequirementExtractor
 from contractfit.file_storage import FileStorageError, LocalFileStorage
+from contractfit.job_queue import InMemoryJobQueue, ProcessingJobQueue
 from contractfit.matching import OpportunityMatcher
+from contractfit.processing import DocumentProcessor
 from contractfit.sample_data import SAMPLE_PROFILE, SAMPLE_SOLICITATION
 from contractfit.store import ContractFitStore, InMemoryStore
 
 router = APIRouter(prefix="/api")
 _store: ContractFitStore = InMemoryStore()
 extractor = RequirementExtractor()
-document_parser = DocumentParser()
+_job_queue: ProcessingJobQueue = InMemoryJobQueue()
+_document_processor: DocumentProcessor | None = None
 
 
 def configure_store(store: ContractFitStore) -> None:
-    global _store
+    global _document_processor, _store
     _store = store
+    _document_processor = None
+
+
+def configure_processing(
+    queue: ProcessingJobQueue, processor: DocumentProcessor | None = None
+) -> None:
+    global _document_processor, _job_queue
+    _job_queue = queue
+    _document_processor = processor
 
 
 def get_store() -> ContractFitStore:
@@ -47,7 +62,21 @@ class ImportTextRequest(BaseModel):
 class DocumentUploadResponse(BaseModel):
     document: SourceDocument
     duplicate: bool
+    job: ProcessingJob | None = None
     opportunity: Opportunity | None = None
+
+
+def _processor() -> DocumentProcessor:
+    global _document_processor
+    if _document_processor is None:
+        settings = get_settings()
+        _document_processor = DocumentProcessor(
+            _store,
+            LocalFileStorage(
+                Path(settings.upload_directory), max_bytes=settings.upload_max_bytes
+            ),
+        )
+    return _document_processor
 
 
 def _matcher() -> OpportunityMatcher:
@@ -116,15 +145,18 @@ def upload_document(file: Annotated[UploadFile, File()]) -> DocumentUploadRespon
         )
 
     try:
-        parsed_pages = document_parser.parse(filename, content_type, data)
         stored = LocalFileStorage(
             Path(settings.upload_directory), max_bytes=settings.upload_max_bytes
         ).store(filename, content_type, data)
-    except (DocumentParseError, FileStorageError) as exc:
+    except FileStorageError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     existing = _store.find_document_by_sha256(stored.sha256)
     if existing is not None:
+        job = next(
+            iter(_store.list_processing_jobs(document_id=existing.id)),
+            None,
+        )
         opportunity = next(
             (
                 item
@@ -134,45 +166,46 @@ def upload_document(file: Annotated[UploadFile, File()]) -> DocumentUploadRespon
             None,
         )
         return DocumentUploadResponse(
-            document=existing, duplicate=True, opportunity=opportunity
+            document=existing, duplicate=True, job=job, opportunity=opportunity
         )
 
-    needs_ocr = any(page.needs_ocr for page in parsed_pages)
     document = _store.save_document(
         SourceDocument(
             filename=stored.original_filename,
-            content="\n\n".join(page.text for page in parsed_pages),
+            content="",
             sha256=stored.sha256,
             storage_key=stored.storage_key,
             content_type=stored.content_type,
             size_bytes=stored.size_bytes,
-            status=DocumentStatus.NEEDS_OCR if needs_ocr else DocumentStatus.READY,
-            page_count=len(parsed_pages),
+            status=DocumentStatus.UPLOADED,
+            page_count=0,
         )
     )
-    pages = _store.save_document_pages(
-        [
-            DocumentPage(
-                document_id=document.id,
-                page_number=page.page_number,
-                text=page.text,
-                needs_ocr=page.needs_ocr,
-            )
-            for page in parsed_pages
-        ]
+    job = _store.save_processing_job(
+        ProcessingJob(
+            document_id=document.id,
+            status=ProcessingJobStatus.QUEUED,
+            stage=ProcessingStage.PARSING,
+        )
     )
     opportunity = None
-    if any(page.text.strip() for page in pages):
-        opportunity = _store.save_opportunity(
-            extractor.extract(
-                document,
-                source_id=f"UPLOAD-{stored.sha256[:12].upper()}",
-                pages=pages,
-            )
+    if settings.processing_mode == "inline":
+        job = _processor().process(job.id)
+        document = _store.get_document(document.id) or document
+        opportunity = next(
+            (
+                item
+                for item in _store.list_opportunities()
+                if item.document_id == document.id
+            ),
+            None,
         )
+    else:
+        _job_queue.enqueue(job.id)
     return DocumentUploadResponse(
         document=document,
         duplicate=stored.duplicate,
+        job=job,
         opportunity=opportunity,
     )
 
@@ -184,12 +217,49 @@ def list_documents() -> list[SourceDocument]:
 
 @router.get("/documents/{document_id}/pages", response_model=list[DocumentPage])
 def list_document_pages(document_id: UUID) -> list[DocumentPage]:
-    document = next(
-        (item for item in _store.list_documents() if item.id == document_id), None
-    )
+    document = _store.get_document(document_id)
     if document is None:
         raise HTTPException(status_code=404, detail="Document not found")
     return _store.list_document_pages(document_id)
+
+
+@router.get("/processing-jobs", response_model=list[ProcessingJob])
+def list_processing_jobs(document_id: UUID | None = None) -> list[ProcessingJob]:
+    return _store.list_processing_jobs(document_id=document_id)
+
+
+@router.get("/processing-jobs/{job_id}", response_model=ProcessingJob)
+def get_processing_job(job_id: UUID) -> ProcessingJob:
+    job = _store.get_processing_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Processing job not found")
+    return job
+
+
+@router.post("/processing-jobs/{job_id}/retry", response_model=ProcessingJob)
+def retry_processing_job(job_id: UUID) -> ProcessingJob:
+    job = get_processing_job(job_id)
+    if job.status not in {
+        ProcessingJobStatus.FAILED,
+        ProcessingJobStatus.NEEDS_REVIEW,
+    }:
+        raise HTTPException(status_code=409, detail="Job is not retryable")
+    job = _store.save_processing_job(
+        job.model_copy(
+            update={
+                "status": ProcessingJobStatus.QUEUED,
+                "stage": ProcessingStage.PARSING,
+                "attempts": 0,
+                "error_message": None,
+                "updated_at": datetime.now(UTC),
+            }
+        )
+    )
+    if get_settings().processing_mode == "inline":
+        job = _processor().process(job.id)
+    else:
+        _job_queue.enqueue(job.id)
+    return job
 
 
 @router.get("/opportunities", response_model=list[Opportunity])
