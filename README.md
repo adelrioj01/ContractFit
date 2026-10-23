@@ -69,7 +69,26 @@ uv run mypy src
 
 ## Current status
 
-This repository contains the project foundation: domain models, health endpoint, local infrastructure, CI, architectural boundaries, and an implementation roadmap. Opportunity ingestion and matching are the next milestone.
+This repository now contains a working vertical-slice MVP:
+
+- A realistic facilities-contractor profile and editable profile API
+- Plain-text solicitation ingestion with evidence-preserving requirement extraction
+- Deterministic deadline, territory, set-aside, certification, and capacity gates
+- Hybrid fit scoring with an optional local Ollama model and an offline fallback
+- An explainable ranked-opportunity dashboard at `http://localhost:8000`
+- A labeled evaluation set measuring extraction recall, citation validity, and eligibility accuracy
+
+Useful API routes:
+
+- `POST /api/opportunities/import-text`
+- `GET /api/opportunities`
+- `GET /api/matches`
+- `GET /api/evaluation`
+- `POST /api/demo/reset`
+
+The default `AI_PROVIDER=offline` makes development deterministic. To exercise local-model
+scoring, run Ollama, download the configured model, and set `AI_PROVIDER=ollama` in `.env`.
+The matching service falls back safely if the local model is unavailable.
 
 ## License
 
