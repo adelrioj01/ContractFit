@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     ai_provider: Literal["offline", "ollama"] = "offline"
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "qwen2.5:7b"
+    storage_backend: Literal["memory", "postgres"] = "memory"
+    seed_demo_data: bool = True
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

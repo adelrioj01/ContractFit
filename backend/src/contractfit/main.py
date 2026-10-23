@@ -5,15 +5,21 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 
-from contractfit.api import router, seed_demo
+from contractfit.api import configure_store, get_store, router, seed_demo
 from contractfit.config import get_settings
+from contractfit.database import build_engine, build_session_factory
+from contractfit.sql_store import SqlAlchemyStore
 
 settings = get_settings()
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    seed_demo()
+    if settings.storage_backend == "postgres":
+        engine = build_engine(settings.database_url)
+        configure_store(SqlAlchemyStore(build_session_factory(engine)))
+    if settings.seed_demo_data and get_store().get_profile() is None:
+        seed_demo()
     yield
 
 

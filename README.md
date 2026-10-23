@@ -90,6 +90,20 @@ The default `AI_PROVIDER=offline` makes development deterministic. To exercise l
 scoring, run Ollama, download the configured model, and set `AI_PROVIDER=ollama` in `.env`.
 The matching service falls back safely if the local model is unavailable.
 
+## Persistence
+
+Docker Compose runs the API with `STORAGE_BACKEND=postgres`. On startup, the container applies
+Alembic migrations and then launches FastAPI. Direct `uv run` development defaults to the
+in-memory adapter unless `STORAGE_BACKEND=postgres` is configured.
+
+Create a future migration after changing SQLAlchemy records:
+
+```bash
+cd backend
+uv run alembic revision --autogenerate -m "describe the schema change"
+uv run alembic upgrade head
+```
+
 ## License
 
 MIT
