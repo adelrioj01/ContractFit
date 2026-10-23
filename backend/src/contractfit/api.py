@@ -10,11 +10,20 @@ from contractfit.evaluation_dataset import EVALUATION_CASES
 from contractfit.extraction import RequirementExtractor
 from contractfit.matching import OpportunityMatcher
 from contractfit.sample_data import SAMPLE_PROFILE, SAMPLE_SOLICITATION
-from contractfit.store import InMemoryStore
+from contractfit.store import ContractFitStore, InMemoryStore
 
 router = APIRouter(prefix="/api")
-store = InMemoryStore()
+_store: ContractFitStore = InMemoryStore()
 extractor = RequirementExtractor()
+
+
+def configure_store(store: ContractFitStore) -> None:
+    global _store
+    _store = store
+
+
+def get_store() -> ContractFitStore:
+    return _store
 
 
 class ImportTextRequest(BaseModel):
@@ -35,57 +44,60 @@ def _matcher() -> OpportunityMatcher:
 
 
 def seed_demo() -> None:
-    store.reset()
-    store.save_profile(SAMPLE_PROFILE.model_copy(deep=True))
-    document = store.save_document(
+    _store.reset()
+    _store.save_profile(SAMPLE_PROFILE.model_copy(deep=True))
+    document = _store.save_document(
         SourceDocument(filename="sample-hvac-solicitation.txt", content=SAMPLE_SOLICITATION)
     )
-    store.save_opportunity(extractor.extract(document, source_id="DEMO-HVAC-001"))
+    _store.save_opportunity(extractor.extract(document, source_id="DEMO-HVAC-001"))
 
 
 @router.post("/demo/reset", status_code=201)
 def reset_demo() -> dict[str, int]:
     seed_demo()
-    return {"profiles": 1, "opportunities": len(store.opportunities)}
+    return {"profiles": 1, "opportunities": len(_store.list_opportunities())}
 
 
 @router.get("/profile", response_model=CompanyProfile)
 def get_profile() -> CompanyProfile:
-    if store.profile is None:
+    profile = _store.get_profile()
+    if profile is None:
         raise HTTPException(status_code=404, detail="No contractor profile configured")
-    return store.profile
+    return profile
 
 
 @router.put("/profile", response_model=CompanyProfile)
 def put_profile(profile: CompanyProfile) -> CompanyProfile:
-    return store.save_profile(profile)
+    return _store.save_profile(profile)
 
 
 @router.post("/opportunities/import-text", response_model=Opportunity, status_code=201)
 def import_text(request: ImportTextRequest) -> Opportunity:
-    document = store.save_document(
+    document = _store.save_document(
         SourceDocument(filename=request.filename, content=request.content)
     )
     opportunity = extractor.extract(document, source_id=request.source_id)
-    return store.save_opportunity(opportunity)
+    return _store.save_opportunity(opportunity)
 
 
 @router.get("/opportunities", response_model=list[Opportunity])
 def list_opportunities() -> list[Opportunity]:
-    return list(store.opportunities.values())
+    return _store.list_opportunities()
 
 
 @router.get("/matches", response_model=list[MatchResult])
 def list_matches() -> list[MatchResult]:
-    if store.profile is None:
+    profile = _store.get_profile()
+    if profile is None:
         raise HTTPException(status_code=409, detail="Create a contractor profile first")
     matcher = _matcher()
-    return [matcher.match(store.profile, item) for item in store.opportunities.values()]
+    return [matcher.match(profile, item) for item in _store.list_opportunities()]
 
 
 @router.get("/evaluation", response_model=EvaluationReport)
 def get_evaluation() -> EvaluationReport:
-    if store.profile is None:
+    profile = _store.get_profile()
+    if profile is None:
         raise HTTPException(status_code=409, detail="Create a contractor profile first")
     cases = [EvaluationCase.model_validate(item) for item in EVALUATION_CASES]
-    return evaluate(cases, store.profile)
+    return evaluate(cases, profile)

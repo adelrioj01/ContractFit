@@ -11,6 +11,13 @@ Semantic scoring is provided through a small interface: the local Ollama adapter
 without changing product logic, while a deterministic lexical fallback keeps tests and demos
 reproducible.
 
+## Persistence boundary
+
+The API depends on the `ContractFitStore` protocol. `InMemoryStore` keeps unit tests and local
+experiments fast; `SqlAlchemyStore` is the production adapter. SQLAlchemy records are deliberately
+separate from Pydantic domain models so database concerns cannot leak into extraction or matching.
+Alembic is the only supported mechanism for changing the PostgreSQL schema.
+
 ContractFit begins as a modular monolith. It can later split ingestion and document processing into independent workers without changing the domain contracts.
 
 ## Data flow

@@ -13,6 +13,13 @@ The next hardening target is persistence and document parsing; the current in-me
 intentional so the product logic can be validated before migrations and infrastructure dominate
 the work.
 
+## Implemented persistence foundation
+- [x] SQLAlchemy models for contractor profiles, source documents, opportunities, and requirements.
+- [x] PostgreSQL repository adapter behind a storage protocol.
+- [x] Alembic migration with foreign keys, indexes, and evidence-preserving fields.
+- [x] Automatic migrations when the Docker API service starts.
+- [x] SQLite repository tests plus the fast in-memory adapter for unit tests.
+
 ## Phase 0: validation
 - Interview 15 facilities-service contractors.
 - Collect five sanitized company profiles.
