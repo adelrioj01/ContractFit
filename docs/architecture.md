@@ -1,5 +1,16 @@
 # Architecture
 
+## Implemented vertical slice
+
+`SourceDocument -> RequirementExtractor -> Opportunity -> OpportunityMatcher -> MatchResult`
+
+The extractor always stores the exact supporting line and document ID. The matcher runs hard
+business gates independently from semantic scoring, so an LLM cannot override a missing license,
+expired deadline, unsupported territory, incompatible set-aside, or contract-capacity limit.
+Semantic scoring is provided through a small interface: the local Ollama adapter can be enabled
+without changing product logic, while a deterministic lexical fallback keeps tests and demos
+reproducible.
+
 ContractFit begins as a modular monolith. It can later split ingestion and document processing into independent workers without changing the domain contracts.
 
 ## Data flow

@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID, uuid4
@@ -17,6 +17,13 @@ class Evidence(BaseModel):
     page: int | None = Field(default=None, ge=1)
     section: str | None = None
     supporting_text: str
+
+
+class SourceDocument(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
+    filename: str
+    content: str
+    imported_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class Requirement(BaseModel):
@@ -39,6 +46,9 @@ class CompanyProfile(BaseModel):
     maximum_contract_value: Decimal | None = Field(default=None, ge=0)
     licenses: list[str] = Field(default_factory=list)
     certifications: list[str] = Field(default_factory=list)
+    set_asides: list[str] = Field(default_factory=list)
+    naics_codes: list[str] = Field(default_factory=list)
+    capability_statement: str = ""
 
 
 class Opportunity(BaseModel):
@@ -46,6 +56,31 @@ class Opportunity(BaseModel):
     source: str
     source_id: str
     title: str
+    agency: str | None = None
     response_deadline: date | None = None
     place_of_performance: str | None = None
+    set_aside: str | None = None
+    estimated_value: Decimal | None = Field(default=None, ge=0)
+    scope: str = ""
+    source_url: str | None = None
+    document_id: UUID | None = None
     requirements: list[Requirement] = Field(default_factory=list)
+
+
+class GateResult(BaseModel):
+    name: str
+    status: EligibilityStatus
+    reason: str
+    evidence: Evidence | None = None
+
+
+class MatchResult(BaseModel):
+    opportunity_id: UUID
+    profile_id: UUID
+    eligibility: EligibilityStatus
+    fit_score: float = Field(ge=0, le=100)
+    scoring_method: str
+    gates: list[GateResult]
+    strengths: list[str]
+    gaps: list[str]
+    explanation: str

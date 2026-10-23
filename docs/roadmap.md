@@ -1,5 +1,18 @@
 # Roadmap
 
+## Implemented MVP vertical slice
+- [x] Sample facilities-contractor profile.
+- [x] Saved solicitation text ingestion.
+- [x] Requirement extraction with verbatim line-level evidence.
+- [x] Deterministic eligibility gates.
+- [x] Hybrid semantic fit scoring with optional local Ollama inference.
+- [x] Ranked opportunity dashboard and JSON API.
+- [x] Three-case labeled evaluation harness and CI coverage.
+
+The next hardening target is persistence and document parsing; the current in-memory store is
+intentional so the product logic can be validated before migrations and infrastructure dominate
+the work.
+
 ## Phase 0: validation
 - Interview 15 facilities-service contractors.
 - Collect five sanitized company profiles.
