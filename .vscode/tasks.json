@@ -1,0 +1,24 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "ContractFit: start services",
+      "type": "shell",
+      "command": "docker compose up --build",
+      "problemMatcher": []
+    },
+    {
+      "label": "ContractFit: test backend",
+      "type": "shell",
+      "command": "uv run --directory backend pytest",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "ContractFit: check backend",
+      "type": "shell",
+      "command": "uv run --directory backend ruff check . && uv run --directory backend mypy src",
+      "problemMatcher": []
+    }
+  ]
+}
