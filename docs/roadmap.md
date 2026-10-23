@@ -9,8 +9,10 @@
 - [x] Ranked opportunity dashboard and JSON API.
 - [x] Three-case labeled evaluation harness and CI coverage.
 
-The current hardening target is human review and external opportunity ingestion. Persistence,
-manual document ingestion, background processing and OCR are implemented end to end.
+The current hardening target is persistence and API integration for human review plus a
+scheduled SAM.gov ingestion workflow. Persistence, manual document ingestion, background
+processing and OCR are implemented end to end and have passed a Docker smoke test with both
+plain text and image-only PDF inputs.
 
 ## Implemented persistence foundation
 - [x] SQLAlchemy models for contractor profiles, source documents, opportunities, and requirements.
@@ -37,7 +39,8 @@ manual document ingestion, background processing and OCR are implemented end to 
 
 ## Phase 3: ingestion
 - [x] Manual PDF, DOCX and TXT opportunity upload.
-- SAM.gov adapter.
+- [x] Testable SAM.gov search client with normalized records, pagination and sanitized errors.
+- Persisted SAM.gov import workflow with scheduling, deduplication and amendment detection.
 - [x] Secure attachment storage, SHA-256 hashing and deduplication.
 - Amendment snapshots and version history.
 - [x] Durable, retryable Redis-backed background processing.
@@ -47,7 +50,8 @@ manual document ingestion, background processing and OCR are implemented end to 
 - [x] Requirement extraction with page-level evidence.
 - [x] Local Tesseract OCR for scanned PDF pages.
 - Excel attachment parsing.
-- Review queue for low-confidence fields.
+- [x] Evidence-linked human-review domain model with deterministic priority and audited decisions.
+- Persisted review queue, API endpoints and reviewer dashboard.
 
 ## Phase 5: matching
 - Deterministic hard gates.

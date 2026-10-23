@@ -17,6 +17,11 @@ with insufficient embedded text are marked `needs_ocr` and rendered for local Te
 Durable `ProcessingJob` records and a Redis queue move parsing, OCR and extraction outside the API
 process; a separate worker retries failures and recovers unfinished jobs after restart.
 
+The external-ingestion boundary includes a typed SAM.gov client that normalizes the provider's
+payload before it reaches product logic. The human-review boundary models field-level decisions
+with organization ownership, source evidence, deterministic priority and auditable terminal
+transitions. Their persistence and HTTP workflows are the next integration step.
+
 ## Persistence boundary
 
 The API depends on the `ContractFitStore` protocol. `InMemoryStore` keeps unit tests and local
