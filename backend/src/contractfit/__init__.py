@@ -1,0 +1,1 @@
+"""ContractFit application package."""
