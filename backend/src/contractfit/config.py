@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     ollama_model: str = "qwen2.5:7b"
     storage_backend: Literal["memory", "postgres"] = "memory"
     seed_demo_data: bool = True
+    upload_directory: str = "data/uploads"
+    upload_max_bytes: int = 20 * 1024 * 1024
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

@@ -72,7 +72,8 @@ uv run mypy src
 This repository now contains a working vertical-slice MVP:
 
 - A realistic facilities-contractor profile and editable profile API
-- Plain-text solicitation ingestion with evidence-preserving requirement extraction
+- PDF, DOCX and TXT solicitation upload with secure hash-addressed storage and deduplication
+- Page-oriented parsing with evidence-preserving requirement extraction and OCR flags
 - Deterministic deadline, territory, set-aside, certification, and capacity gates
 - Hybrid fit scoring with an optional local Ollama model and an offline fallback
 - An explainable ranked-opportunity dashboard at `http://localhost:8000`
@@ -80,6 +81,9 @@ This repository now contains a working vertical-slice MVP:
 
 Useful API routes:
 
+- `POST /api/documents/upload`
+- `GET /api/documents`
+- `GET /api/documents/{document_id}/pages`
 - `POST /api/opportunities/import-text`
 - `GET /api/opportunities`
 - `GET /api/matches`

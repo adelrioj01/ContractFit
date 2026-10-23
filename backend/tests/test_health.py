@@ -1,24 +1,28 @@
-from fastapi.testclient import TestClient
-
-from contractfit.main import app
-
-client = TestClient(app)
+from contractfit.api import (
+    configure_store,
+    get_evaluation,
+    list_matches,
+    list_opportunities,
+    reset_demo,
+)
+from contractfit.main import app, health
+from contractfit.store import InMemoryStore
 
 
 def test_health() -> None:
-    response = client.get("/health")
-
-    assert response.status_code == 200
-    assert response.json()["status"] == "ok"
+    assert health()["status"] == "ok"
+    assert "/health" in app.openapi()["paths"]
 
 
 def test_demo_vertical_slice() -> None:
-    assert client.post("/api/demo/reset").status_code == 201
-    opportunities = client.get("/api/opportunities").json()
-    matches = client.get("/api/matches").json()
-    evaluation = client.get("/api/evaluation").json()
+    configure_store(InMemoryStore())
+    assert reset_demo()["opportunities"] == 1
+    opportunities = list_opportunities()
+    matches = list_matches()
+    evaluation = get_evaluation()
 
     assert len(opportunities) == 1
-    assert matches[0]["eligibility"] == "eligible"
-    assert matches[0]["gates"][0]["evidence"]["supporting_text"]
-    assert evaluation["eligibility_accuracy"] == 1
+    assert matches[0].eligibility == "eligible"
+    assert matches[0].gates[0].evidence is not None
+    assert matches[0].gates[0].evidence.supporting_text
+    assert evaluation.eligibility_accuracy == 1

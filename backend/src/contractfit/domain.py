@@ -12,6 +12,14 @@ class EligibilityStatus(StrEnum):
     NEEDS_REVIEW = "needs_review"
 
 
+class DocumentStatus(StrEnum):
+    UPLOADED = "uploaded"
+    PROCESSING = "processing"
+    READY = "ready"
+    NEEDS_OCR = "needs_ocr"
+    FAILED = "failed"
+
+
 class Evidence(BaseModel):
     document_id: UUID
     page: int | None = Field(default=None, ge=1)
@@ -24,6 +32,21 @@ class SourceDocument(BaseModel):
     filename: str
     content: str
     imported_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    sha256: str | None = Field(default=None, min_length=64, max_length=64)
+    storage_key: str | None = None
+    content_type: str = "text/plain"
+    size_bytes: int = Field(default=0, ge=0)
+    status: DocumentStatus = DocumentStatus.READY
+    page_count: int = Field(default=1, ge=0)
+    error_message: str | None = None
+
+
+class DocumentPage(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
+    document_id: UUID
+    page_number: int = Field(ge=1)
+    text: str
+    needs_ocr: bool = False
 
 
 class Requirement(BaseModel):

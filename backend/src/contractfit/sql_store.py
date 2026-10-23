@@ -1,10 +1,21 @@
+from uuid import UUID
+
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from contractfit.database import transaction
-from contractfit.domain import CompanyProfile, Evidence, Opportunity, Requirement, SourceDocument
+from contractfit.domain import (
+    CompanyProfile,
+    DocumentPage,
+    DocumentStatus,
+    Evidence,
+    Opportunity,
+    Requirement,
+    SourceDocument,
+)
 from contractfit.persistence_models import (
     CompanyProfileRecord,
+    DocumentPageRecord,
     OpportunityRecord,
     RequirementRecord,
     SourceDocumentRecord,
@@ -19,6 +30,7 @@ class SqlAlchemyStore:
         with transaction(self.session_factory) as session:
             session.execute(delete(RequirementRecord))
             session.execute(delete(OpportunityRecord))
+            session.execute(delete(DocumentPageRecord))
             session.execute(delete(SourceDocumentRecord))
             session.execute(delete(CompanyProfileRecord))
 
@@ -34,8 +46,51 @@ class SqlAlchemyStore:
 
     def save_document(self, document: SourceDocument) -> SourceDocument:
         with transaction(self.session_factory) as session:
-            session.merge(SourceDocumentRecord(**document.model_dump()))
+            payload = document.model_dump()
+            payload["status"] = document.status.value
+            session.merge(SourceDocumentRecord(**payload))
         return document
+
+    def find_document_by_sha256(self, sha256: str) -> SourceDocument | None:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(SourceDocumentRecord).where(SourceDocumentRecord.sha256 == sha256)
+            ).first()
+            return self._document_from_record(record) if record else None
+
+    def list_documents(self) -> list[SourceDocument]:
+        with transaction(self.session_factory) as session:
+            records = session.scalars(select(SourceDocumentRecord)).all()
+            return [self._document_from_record(record) for record in records]
+
+    def save_document_pages(self, pages: list[DocumentPage]) -> list[DocumentPage]:
+        if not pages:
+            return pages
+        with transaction(self.session_factory) as session:
+            document_id = pages[0].document_id
+            session.execute(
+                delete(DocumentPageRecord).where(DocumentPageRecord.document_id == document_id)
+            )
+            session.add_all([DocumentPageRecord(**page.model_dump()) for page in pages])
+        return pages
+
+    def list_document_pages(self, document_id: UUID) -> list[DocumentPage]:
+        with transaction(self.session_factory) as session:
+            records = session.scalars(
+                select(DocumentPageRecord)
+                .where(DocumentPageRecord.document_id == document_id)
+                .order_by(DocumentPageRecord.page_number)
+            ).all()
+            return [
+                DocumentPage(
+                    id=record.id,
+                    document_id=record.document_id,
+                    page_number=record.page_number,
+                    text=record.text,
+                    needs_ocr=record.needs_ocr,
+                )
+                for record in records
+            ]
 
     def save_opportunity(self, opportunity: Opportunity) -> Opportunity:
         with transaction(self.session_factory) as session:
@@ -73,6 +128,22 @@ class SqlAlchemyStore:
             set_asides=record.set_asides,
             naics_codes=record.naics_codes,
             capability_statement=record.capability_statement,
+        )
+
+    @staticmethod
+    def _document_from_record(record: SourceDocumentRecord) -> SourceDocument:
+        return SourceDocument(
+            id=record.id,
+            filename=record.filename,
+            content=record.content,
+            imported_at=record.imported_at,
+            sha256=record.sha256,
+            storage_key=record.storage_key,
+            content_type=record.content_type,
+            size_bytes=record.size_bytes,
+            status=DocumentStatus(record.status),
+            page_count=record.page_count,
+            error_message=record.error_message,
         )
 
     @staticmethod

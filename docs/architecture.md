@@ -2,7 +2,7 @@
 
 ## Implemented vertical slice
 
-`SourceDocument -> RequirementExtractor -> Opportunity -> OpportunityMatcher -> MatchResult`
+`Upload -> LocalFileStorage -> DocumentParser -> SourceDocument/DocumentPage -> RequirementExtractor -> Opportunity -> OpportunityMatcher -> MatchResult`
 
 The extractor always stores the exact supporting line and document ID. The matcher runs hard
 business gates independently from semantic scoring, so an LLM cannot override a missing license,
@@ -10,6 +10,11 @@ expired deadline, unsupported territory, incompatible set-aside, or contract-cap
 Semantic scoring is provided through a small interface: the local Ollama adapter can be enabled
 without changing product logic, while a deterministic lexical fallback keeps tests and demos
 reproducible.
+
+Uploaded files are content-addressed by SHA-256 and stored outside the database. Parsed text is
+persisted per page, which lets every extracted requirement cite a stable document and page. Pages
+with insufficient embedded text are marked `needs_ocr`; running an OCR engine is the next document
+intelligence milestone.
 
 ## Persistence boundary
 
