@@ -1,6 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,8 +21,21 @@ class Settings(BaseSettings):
     processing_queue_name: str = "contractfit:document-jobs"
     ocr_backend: Literal["disabled", "tesseract"] = "disabled"
     tesseract_command: str = "tesseract"
+    auth_secret_key: str = Field(
+        default="development-only-change-me-32-bytes", min_length=32
+    )
+    auth_access_token_minutes: int = Field(default=60, ge=1, le=1440)
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @model_validator(mode="after")
+    def production_requires_private_auth_secret(self) -> "Settings":
+        if (
+            self.app_env == "production"
+            and self.auth_secret_key == "development-only-change-me-32-bytes"
+        ):
+            raise ValueError("production requires a private AUTH_SECRET_KEY")
+        return self
 
 
 @lru_cache

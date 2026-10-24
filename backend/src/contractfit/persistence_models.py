@@ -18,6 +18,41 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from contractfit.database import Base
 
 
+class OrganizationRecord(Base):
+    __tablename__ = "organizations"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    name: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class UserAccountRecord(Base):
+    __tablename__ = "user_accounts"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    display_name: Mapped[str] = mapped_column(String(255))
+    password_hash: Mapped[str] = mapped_column(String(500))
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class OrganizationMembershipRecord(Base):
+    __tablename__ = "organization_memberships"
+    __table_args__ = (
+        UniqueConstraint("user_id", name="uq_organization_memberships_user_id"),
+    )
+
+    organization_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("user_accounts.id", ondelete="CASCADE"), primary_key=True
+    )
+    role: Mapped[str] = mapped_column(String(50))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class CompanyProfileRecord(Base):
     __tablename__ = "company_profiles"
 

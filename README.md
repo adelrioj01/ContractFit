@@ -52,7 +52,7 @@ curl http://localhost:8000/health
 Expected response:
 
 ```json
-{"status":"ok","service":"contractfit-api"}
+{"status":"ok","environment":"development"}
 ```
 
 ## Backend development
@@ -79,10 +79,14 @@ This repository now contains a working vertical-slice MVP:
 - Deterministic deadline, territory, set-aside, certification, and capacity gates
 - Hybrid fit scoring with an optional local Ollama model and an offline fallback
 - An explainable ranked-opportunity dashboard at `http://localhost:8000`
+- Organization accounts, Argon2 password hashing, signed access tokens and authenticated reviews
 - A labeled evaluation set measuring extraction recall, citation validity, and eligibility accuracy
 
 Useful API routes:
 
+- `POST /api/auth/register`
+- `POST /api/auth/token`
+- `GET /api/auth/me`
 - `POST /api/documents/upload`
 - `GET /api/documents`
 - `GET /api/documents/{document_id}/pages`
@@ -94,6 +98,10 @@ Useful API routes:
 - `GET /api/matches`
 - `GET /api/evaluation`
 - `POST /api/demo/reset`
+
+The seeded local reviewer account is `demo@contractfit.local` with password
+`contractfit-demo-password`. It is for local development only. Production refuses to start with
+the default signing secret; set a private `AUTH_SECRET_KEY` of at least 32 characters.
 
 The default `AI_PROVIDER=offline` makes development deterministic. To exercise local-model
 scoring, run Ollama, download the configured model, and set `AI_PROVIDER=ollama` in `.env`.

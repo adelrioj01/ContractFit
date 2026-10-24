@@ -1,9 +1,11 @@
 from contractfit.api import (
+    DEMO_EMAIL,
     configure_store,
     get_evaluation,
     list_matches,
     list_opportunities,
     reset_demo,
+    seed_demo,
 )
 from contractfit.main import app, health
 from contractfit.store import InMemoryStore
@@ -15,8 +17,12 @@ def test_health() -> None:
 
 
 def test_demo_vertical_slice() -> None:
-    configure_store(InMemoryStore())
-    assert reset_demo()["opportunities"] == 1
+    store = InMemoryStore()
+    configure_store(store)
+    seed_demo()
+    identity = store.get_identity_by_email(DEMO_EMAIL)
+    assert identity is not None
+    assert reset_demo(identity)["opportunities"] == 1
     opportunities = list_opportunities()
     matches = list_matches()
     evaluation = get_evaluation()

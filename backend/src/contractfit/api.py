@@ -3,9 +3,22 @@ from pathlib import Path
 from typing import Annotated
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
+import jwt
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
 
+from contractfit.auth import (
+    AuthIdentity,
+    Organization,
+    OrganizationMembership,
+    OrganizationRole,
+    UserAccount,
+    create_access_token,
+    decode_access_token,
+    hash_password,
+    verify_password,
+)
 from contractfit.config import get_settings
 from contractfit.domain import (
     CompanyProfile,
@@ -31,10 +44,14 @@ from contractfit.sample_data import SAMPLE_PROFILE, SAMPLE_SOLICITATION
 from contractfit.store import ContractFitStore, InMemoryStore
 
 router = APIRouter(prefix="/api")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
 _store: ContractFitStore = InMemoryStore()
 extractor = RequirementExtractor()
 _job_queue: ProcessingJobQueue = InMemoryJobQueue()
 _document_processor: DocumentProcessor | None = None
+DEMO_EMAIL = "demo@contractfit.local"
+DEMO_PASSWORD = "contractfit-demo-password"
+DEMO_USER_ID = UUID("cd665135-9ab0-491e-9b65-707c33e429a4")
 
 
 def configure_store(store: ContractFitStore) -> None:
@@ -69,7 +86,6 @@ class DocumentUploadResponse(BaseModel):
 
 
 class CreateReviewRequest(BaseModel):
-    organization_id: UUID
     opportunity_id: UUID | None = None
     field_name: str = Field(min_length=1)
     extracted_value: str | None = None
@@ -80,16 +96,67 @@ class CreateReviewRequest(BaseModel):
 
 
 class ResolveReviewRequest(BaseModel):
-    organization_id: UUID
-    reviewer_id: UUID
     corrected_value: str = Field(min_length=1)
     note: str | None = None
 
 
 class DismissReviewRequest(BaseModel):
-    organization_id: UUID
-    reviewer_id: UUID
     note: str | None = None
+
+
+class RegisterRequest(BaseModel):
+    organization_name: str = Field(min_length=1, max_length=255)
+    email: str = Field(min_length=3, max_length=320)
+    display_name: str = Field(min_length=1, max_length=255)
+    password: str = Field(min_length=12, max_length=128)
+
+
+class AccessTokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class CurrentUserResponse(BaseModel):
+    user_id: UUID
+    email: str
+    display_name: str
+    organization_id: UUID
+    organization_name: str
+    role: OrganizationRole
+
+
+def _token_for(identity: AuthIdentity) -> AccessTokenResponse:
+    settings = get_settings()
+    return AccessTokenResponse(
+        access_token=create_access_token(
+            identity,
+            settings.auth_secret_key,
+            expires_minutes=settings.auth_access_token_minutes,
+        )
+    )
+
+
+def get_current_identity(
+    token: Annotated[str, Depends(oauth2_scheme)],
+) -> AuthIdentity:
+    unauthorized = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired access token",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        claims = decode_access_token(token, get_settings().auth_secret_key)
+    except (jwt.InvalidTokenError, KeyError, ValueError):
+        raise unauthorized from None
+    identity = _store.get_identity_by_user_id(claims.sub)
+    if (
+        identity is None
+        or not identity.user.is_active
+        or identity.organization.id != claims.organization_id
+        or identity.membership.role is not claims.role
+    ):
+        raise unauthorized
+    return identity
 
 
 def _processor() -> DocumentProcessor:
@@ -118,6 +185,7 @@ def _matcher() -> OpportunityMatcher:
 
 def seed_demo() -> None:
     _store.reset()
+    seed_demo_identity()
     _store.save_profile(SAMPLE_PROFILE.model_copy(deep=True))
     document = _store.save_document(
         SourceDocument(filename="sample-hvac-solicitation.txt", content=SAMPLE_SOLICITATION)
@@ -125,8 +193,96 @@ def seed_demo() -> None:
     _store.save_opportunity(extractor.extract(document, source_id="DEMO-HVAC-001"))
 
 
+def seed_demo_identity() -> AuthIdentity:
+    existing = _store.get_identity_by_email(DEMO_EMAIL)
+    if existing is not None:
+        return existing
+    organization = Organization(
+        id=SAMPLE_PROFILE.organization_id,
+        name=SAMPLE_PROFILE.name,
+    )
+    user = UserAccount(
+        id=DEMO_USER_ID,
+        email=DEMO_EMAIL,
+        display_name="Demo reviewer",
+        password_hash=hash_password(DEMO_PASSWORD),
+    )
+    return _store.register_identity(
+        AuthIdentity(
+            user=user,
+            organization=organization,
+            membership=OrganizationMembership(
+                organization_id=organization.id,
+                user_id=user.id,
+                role=OrganizationRole.ADMIN,
+            ),
+        )
+    )
+
+
+@router.post("/auth/register", response_model=AccessTokenResponse, status_code=201)
+def register(request: RegisterRequest) -> AccessTokenResponse:
+    organization = Organization(name=request.organization_name)
+    user = UserAccount(
+        email=request.email,
+        display_name=request.display_name,
+        password_hash=hash_password(request.password),
+    )
+    identity = AuthIdentity(
+        user=user,
+        organization=organization,
+        membership=OrganizationMembership(
+            organization_id=organization.id,
+            user_id=user.id,
+            role=OrganizationRole.ADMIN,
+        ),
+    )
+    try:
+        return _token_for(_store.register_identity(identity))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/auth/token", response_model=AccessTokenResponse)
+def login(
+    form: Annotated[OAuth2PasswordRequestForm, Depends()],
+) -> AccessTokenResponse:
+    identity = _store.get_identity_by_email(form.username)
+    if (
+        identity is None
+        or not identity.user.is_active
+        or not verify_password(form.password, identity.user.password_hash)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return _token_for(identity)
+
+
+@router.get("/auth/me", response_model=CurrentUserResponse)
+def current_user(
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> CurrentUserResponse:
+    return CurrentUserResponse(
+        user_id=identity.user.id,
+        email=identity.user.email,
+        display_name=identity.user.display_name,
+        organization_id=identity.organization.id,
+        organization_name=identity.organization.name,
+        role=identity.membership.role,
+    )
+
+
 @router.post("/demo/reset", status_code=201)
-def reset_demo() -> dict[str, int]:
+def reset_demo(
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> dict[str, int]:
+    if get_settings().app_env == "production":
+        raise HTTPException(status_code=404, detail="Not found")
+    if identity.membership.role is not OrganizationRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Administrator role required")
     seed_demo()
     return {"profiles": 1, "opportunities": len(_store.list_opportunities())}
 
@@ -294,37 +450,51 @@ def list_opportunities() -> list[Opportunity]:
 
 
 @router.post("/reviews", response_model=ReviewItem, status_code=status.HTTP_201_CREATED)
-def create_review(request: CreateReviewRequest) -> ReviewItem:
-    return _store.save_review_item(ReviewItem.model_validate(request.model_dump()))
+def create_review(
+    request: CreateReviewRequest,
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> ReviewItem:
+    return _store.save_review_item(
+        ReviewItem.model_validate(
+            {**request.model_dump(), "organization_id": identity.organization.id}
+        )
+    )
 
 
 @router.get("/reviews", response_model=list[ReviewItem])
 def list_reviews(
-    organization_id: UUID,
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
     review_status: Annotated[ReviewStatus | None, Query(alias="status")] = None,
     opportunity_id: UUID | None = None,
 ) -> list[ReviewItem]:
     return _store.list_review_items(
-        organization_id,
+        identity.organization.id,
         status=review_status,
         opportunity_id=opportunity_id,
     )
 
 
 @router.get("/reviews/{review_id}", response_model=ReviewItem)
-def get_review(review_id: UUID, organization_id: UUID) -> ReviewItem:
-    item = _store.get_review_item(review_id, organization_id)
+def get_review(
+    review_id: UUID,
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> ReviewItem:
+    item = _store.get_review_item(review_id, identity.organization.id)
     if item is None:
         raise HTTPException(status_code=404, detail="Review item not found")
     return item
 
 
 @router.post("/reviews/{review_id}/resolve", response_model=ReviewItem)
-def resolve_review(review_id: UUID, request: ResolveReviewRequest) -> ReviewItem:
-    item = get_review(review_id, request.organization_id)
+def resolve_review(
+    review_id: UUID,
+    request: ResolveReviewRequest,
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> ReviewItem:
+    item = get_review(review_id, identity)
     try:
         updated = item.resolve(
-            reviewer_id=request.reviewer_id,
+            reviewer_id=identity.user.id,
             corrected_value=request.corrected_value,
             note=request.note,
         )
@@ -334,10 +504,14 @@ def resolve_review(review_id: UUID, request: ResolveReviewRequest) -> ReviewItem
 
 
 @router.post("/reviews/{review_id}/dismiss", response_model=ReviewItem)
-def dismiss_review(review_id: UUID, request: DismissReviewRequest) -> ReviewItem:
-    item = get_review(review_id, request.organization_id)
+def dismiss_review(
+    review_id: UUID,
+    request: DismissReviewRequest,
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> ReviewItem:
+    item = get_review(review_id, identity)
     try:
-        updated = item.dismiss(reviewer_id=request.reviewer_id, note=request.note)
+        updated = item.dismiss(reviewer_id=identity.user.id, note=request.note)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _store.save_review_item(updated)
