@@ -9,10 +9,10 @@
 - [x] Ranked opportunity dashboard and JSON API.
 - [x] Three-case labeled evaluation harness and CI coverage.
 
-The current hardening target is persistence and API integration for human review plus a
-scheduled SAM.gov ingestion workflow. Persistence, manual document ingestion, background
-processing and OCR are implemented end to end and have passed a Docker smoke test with both
-plain text and image-only PDF inputs.
+The current hardening target is authenticated organization boundaries plus a scheduled SAM.gov
+ingestion workflow. Persistence, manual document ingestion, background processing, OCR, and the
+human-review queue are implemented end to end. The ingestion path has passed a Docker smoke test
+with both plain text and image-only PDF inputs.
 
 ## Implemented persistence foundation
 - [x] SQLAlchemy models for contractor profiles, source documents, opportunities, and requirements.
@@ -51,7 +51,9 @@ plain text and image-only PDF inputs.
 - [x] Local Tesseract OCR for scanned PDF pages.
 - Excel attachment parsing.
 - [x] Evidence-linked human-review domain model with deterministic priority and audited decisions.
-- Persisted review queue, API endpoints and reviewer dashboard.
+- [x] Organization-scoped persisted review queue and resolution API.
+- [x] Basic reviewer dashboard for correcting or dismissing low-confidence fields.
+- Replace the dashboard's local reviewer identity with authenticated user identity.
 
 ## Phase 5: matching
 - Deterministic hard gates.

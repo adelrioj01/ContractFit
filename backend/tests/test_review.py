@@ -4,12 +4,13 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from contractfit.domain import Evidence
+from contractfit.domain import Evidence, Opportunity, Requirement
 from contractfit.review import (
     ReviewItem,
     ReviewPriority,
     ReviewReason,
     ReviewStatus,
+    build_requirement_reviews,
     calculate_priority_score,
     review_sort_key,
 )
@@ -197,4 +198,37 @@ def test_timestamps_must_be_aware_and_ordered() -> None:
         make_item(created_at=datetime(2026, 10, 23))
     with pytest.raises(ValidationError, match="cannot precede"):
         make_item(created_at=now, updated_at=now - timedelta(seconds=1))
+
+
+def test_low_confidence_requirements_become_evidence_linked_reviews() -> None:
+    organization_id = uuid4()
+    document_id = uuid4()
+    uncertain = Requirement(
+        category="certification",
+        description="Possible OSHA certification",
+        mandatory=True,
+        confidence=0.62,
+        evidence=Evidence(document_id=document_id, supporting_text="OSHA may be required"),
+    )
+    certain = uncertain.model_copy(update={"id": uuid4(), "confidence": 0.95})
+    opportunity = Opportunity(
+        source="test",
+        source_id="review-build",
+        title="Test",
+        requirements=[uncertain, certain],
+    )
+
+    items = build_requirement_reviews(opportunity, organization_id)
+
+    assert len(items) == 1
+    assert items[0].organization_id == organization_id
+    assert items[0].field_name == f"requirement:{uncertain.id}"
+    assert items[0].evidence[0].document_id == document_id
+    assert items[0].model_dump()["priority"] == items[0].priority
+
+
+def test_review_builder_validates_threshold() -> None:
+    opportunity = Opportunity(source="test", source_id="bad-threshold", title="Test")
+    with pytest.raises(ValueError, match="confidence_threshold"):
+        build_requirement_reviews(opportunity, uuid4(), confidence_threshold=1.1)
 

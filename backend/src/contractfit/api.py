@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Annotated
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, Field
 
 from contractfit.config import get_settings
@@ -11,6 +11,7 @@ from contractfit.domain import (
     CompanyProfile,
     DocumentPage,
     DocumentStatus,
+    Evidence,
     MatchResult,
     Opportunity,
     ProcessingJob,
@@ -25,6 +26,7 @@ from contractfit.file_storage import FileStorageError, LocalFileStorage
 from contractfit.job_queue import InMemoryJobQueue, ProcessingJobQueue
 from contractfit.matching import OpportunityMatcher
 from contractfit.processing import DocumentProcessor
+from contractfit.review import ReviewItem, ReviewReason, ReviewStatus
 from contractfit.sample_data import SAMPLE_PROFILE, SAMPLE_SOLICITATION
 from contractfit.store import ContractFitStore, InMemoryStore
 
@@ -64,6 +66,30 @@ class DocumentUploadResponse(BaseModel):
     duplicate: bool
     job: ProcessingJob | None = None
     opportunity: Opportunity | None = None
+
+
+class CreateReviewRequest(BaseModel):
+    organization_id: UUID
+    opportunity_id: UUID | None = None
+    field_name: str = Field(min_length=1)
+    extracted_value: str | None = None
+    confidence: float = Field(ge=0, le=1)
+    mandatory: bool = False
+    reason: ReviewReason
+    evidence: list[Evidence] = Field(min_length=1)
+
+
+class ResolveReviewRequest(BaseModel):
+    organization_id: UUID
+    reviewer_id: UUID
+    corrected_value: str = Field(min_length=1)
+    note: str | None = None
+
+
+class DismissReviewRequest(BaseModel):
+    organization_id: UUID
+    reviewer_id: UUID
+    note: str | None = None
 
 
 def _processor() -> DocumentProcessor:
@@ -265,6 +291,56 @@ def retry_processing_job(job_id: UUID) -> ProcessingJob:
 @router.get("/opportunities", response_model=list[Opportunity])
 def list_opportunities() -> list[Opportunity]:
     return _store.list_opportunities()
+
+
+@router.post("/reviews", response_model=ReviewItem, status_code=status.HTTP_201_CREATED)
+def create_review(request: CreateReviewRequest) -> ReviewItem:
+    return _store.save_review_item(ReviewItem.model_validate(request.model_dump()))
+
+
+@router.get("/reviews", response_model=list[ReviewItem])
+def list_reviews(
+    organization_id: UUID,
+    review_status: Annotated[ReviewStatus | None, Query(alias="status")] = None,
+    opportunity_id: UUID | None = None,
+) -> list[ReviewItem]:
+    return _store.list_review_items(
+        organization_id,
+        status=review_status,
+        opportunity_id=opportunity_id,
+    )
+
+
+@router.get("/reviews/{review_id}", response_model=ReviewItem)
+def get_review(review_id: UUID, organization_id: UUID) -> ReviewItem:
+    item = _store.get_review_item(review_id, organization_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Review item not found")
+    return item
+
+
+@router.post("/reviews/{review_id}/resolve", response_model=ReviewItem)
+def resolve_review(review_id: UUID, request: ResolveReviewRequest) -> ReviewItem:
+    item = get_review(review_id, request.organization_id)
+    try:
+        updated = item.resolve(
+            reviewer_id=request.reviewer_id,
+            corrected_value=request.corrected_value,
+            note=request.note,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _store.save_review_item(updated)
+
+
+@router.post("/reviews/{review_id}/dismiss", response_model=ReviewItem)
+def dismiss_review(review_id: UUID, request: DismissReviewRequest) -> ReviewItem:
+    item = get_review(review_id, request.organization_id)
+    try:
+        updated = item.dismiss(reviewer_id=request.reviewer_id, note=request.note)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _store.save_review_item(updated)
 
 
 @router.get("/matches", response_model=list[MatchResult])
