@@ -1,4 +1,4 @@
-from datetime import UTC
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import delete, select
@@ -23,8 +23,11 @@ from contractfit.persistence_models import (
     OpportunityRecord,
     ProcessingJobRecord,
     RequirementRecord,
+    ReviewEvidenceRecord,
+    ReviewItemRecord,
     SourceDocumentRecord,
 )
+from contractfit.review import ReviewItem, ReviewReason, ReviewStatus, review_sort_key
 
 
 class SqlAlchemyStore:
@@ -33,6 +36,8 @@ class SqlAlchemyStore:
 
     def reset(self) -> None:
         with transaction(self.session_factory) as session:
+            session.execute(delete(ReviewEvidenceRecord))
+            session.execute(delete(ReviewItemRecord))
             session.execute(delete(RequirementRecord))
             session.execute(delete(OpportunityRecord))
             session.execute(delete(ProcessingJobRecord))
@@ -144,6 +149,56 @@ class SqlAlchemyStore:
             records = session.scalars(select(OpportunityRecord)).unique().all()
             return [self._opportunity_from_record(record) for record in records]
 
+    def save_review_item(self, item: ReviewItem) -> ReviewItem:
+        with transaction(self.session_factory) as session:
+            existing = session.get(ReviewItemRecord, item.id)
+            if existing:
+                session.delete(existing)
+                session.flush()
+            payload = item.model_dump(exclude={"evidence", "priority", "priority_score"})
+            payload["reason"] = item.reason.value
+            payload["status"] = item.status.value
+            session.add(
+                ReviewItemRecord(
+                    **payload,
+                    evidence=[
+                        ReviewEvidenceRecord(position=index, **evidence.model_dump())
+                        for index, evidence in enumerate(item.evidence)
+                    ],
+                )
+            )
+        return item
+
+    def get_review_item(self, review_id: UUID, organization_id: UUID) -> ReviewItem | None:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(ReviewItemRecord).where(
+                    ReviewItemRecord.id == review_id,
+                    ReviewItemRecord.organization_id == organization_id,
+                )
+            ).unique().first()
+            return self._review_from_record(record) if record else None
+
+    def list_review_items(
+        self,
+        organization_id: UUID,
+        status: ReviewStatus | None = None,
+        opportunity_id: UUID | None = None,
+    ) -> list[ReviewItem]:
+        with transaction(self.session_factory) as session:
+            statement = select(ReviewItemRecord).where(
+                ReviewItemRecord.organization_id == organization_id
+            )
+            if status is not None:
+                statement = statement.where(ReviewItemRecord.status == status.value)
+            if opportunity_id is not None:
+                statement = statement.where(ReviewItemRecord.opportunity_id == opportunity_id)
+            records = session.scalars(statement).unique().all()
+            return sorted(
+                [self._review_from_record(record) for record in records],
+                key=review_sort_key,
+            )
+
     @staticmethod
     def _profile_from_record(record: CompanyProfileRecord) -> CompanyProfile:
         return CompanyProfile(
@@ -244,4 +299,41 @@ class SqlAlchemyStore:
             source_url=record.source_url,
             document_id=record.document_id,
             requirements=requirements,
+        )
+
+    @staticmethod
+    def _review_from_record(record: ReviewItemRecord) -> ReviewItem:
+        def aware(value: datetime | None) -> datetime | None:
+            if value is not None and value.tzinfo is None:
+                return value.replace(tzinfo=UTC)
+            return value
+
+        def aware_required(value: datetime) -> datetime:
+            return aware(value) or value
+
+        return ReviewItem(
+            id=record.id,
+            organization_id=record.organization_id,
+            opportunity_id=record.opportunity_id,
+            field_name=record.field_name,
+            extracted_value=record.extracted_value,
+            confidence=float(record.confidence),
+            mandatory=record.mandatory,
+            reason=ReviewReason(record.reason),
+            status=ReviewStatus(record.status),
+            corrected_value=record.corrected_value,
+            reviewer_id=record.reviewer_id,
+            resolution_note=record.resolution_note,
+            created_at=aware_required(record.created_at),
+            updated_at=aware_required(record.updated_at),
+            resolved_at=aware(record.resolved_at),
+            evidence=[
+                Evidence(
+                    document_id=item.document_id,
+                    page=item.page,
+                    section=item.section,
+                    supporting_text=item.supporting_text,
+                )
+                for item in record.evidence
+            ],
         )

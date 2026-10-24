@@ -14,6 +14,7 @@ from contractfit.domain import (
 from contractfit.extraction import RequirementExtractor
 from contractfit.file_storage import LocalFileStorage
 from contractfit.ocr import DocumentOcrProcessor, OcrError
+from contractfit.review import build_requirement_reviews
 from contractfit.store import ContractFitStore
 
 
@@ -116,6 +117,20 @@ class DocumentProcessor:
                 if existing is not None:
                     opportunity.id = existing.id
                 self.store.save_opportunity(opportunity)
+                profile = self.store.get_profile()
+                if profile is not None:
+                    existing_fields = {
+                        item.field_name
+                        for item in self.store.list_review_items(
+                            profile.organization_id,
+                            opportunity_id=opportunity.id,
+                        )
+                    }
+                    for review in build_requirement_reviews(
+                        opportunity, profile.organization_id
+                    ):
+                        if review.field_name not in existing_fields:
+                            self.store.save_review_item(review)
 
             return self._save_job(
                 job,

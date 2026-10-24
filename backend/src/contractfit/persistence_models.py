@@ -112,6 +112,9 @@ class OpportunityRecord(Base):
     requirements: Mapped[list["RequirementRecord"]] = relationship(
         back_populates="opportunity", cascade="all, delete-orphan"
     )
+    review_items: Mapped[list["ReviewItemRecord"]] = relationship(
+        back_populates="opportunity"
+    )
 
 
 class RequirementRecord(Base):
@@ -132,3 +135,55 @@ class RequirementRecord(Base):
     evidence_section: Mapped[str | None] = mapped_column(String(255))
     evidence_supporting_text: Mapped[str] = mapped_column(Text)
     opportunity: Mapped[OpportunityRecord] = relationship(back_populates="requirements")
+
+
+class ReviewItemRecord(Base):
+    __tablename__ = "review_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "opportunity_id",
+            "field_name",
+            name="uq_review_items_opportunity_field",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    organization_id: Mapped[UUID] = mapped_column(Uuid, index=True)
+    opportunity_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("opportunities.id", ondelete="SET NULL"), index=True
+    )
+    field_name: Mapped[str] = mapped_column(String(255))
+    extracted_value: Mapped[str | None] = mapped_column(Text)
+    confidence: Mapped[Decimal] = mapped_column(Numeric(5, 4))
+    mandatory: Mapped[bool] = mapped_column(default=False)
+    reason: Mapped[str] = mapped_column(String(50))
+    status: Mapped[str] = mapped_column(String(50), index=True)
+    corrected_value: Mapped[str | None] = mapped_column(Text)
+    reviewer_id: Mapped[UUID | None] = mapped_column(Uuid)
+    resolution_note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    opportunity: Mapped[OpportunityRecord | None] = relationship(back_populates="review_items")
+    evidence: Mapped[list["ReviewEvidenceRecord"]] = relationship(
+        back_populates="review_item",
+        cascade="all, delete-orphan",
+        order_by="ReviewEvidenceRecord.position",
+    )
+
+
+class ReviewEvidenceRecord(Base):
+    __tablename__ = "review_evidence"
+
+    review_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("review_items.id", ondelete="CASCADE"), primary_key=True
+    )
+    position: Mapped[int] = mapped_column(primary_key=True)
+    document_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("source_documents.id", ondelete="RESTRICT")
+    )
+    page: Mapped[int | None]
+    section: Mapped[str | None] = mapped_column(String(255))
+    supporting_text: Mapped[str] = mapped_column(Text)
+    review_item: Mapped[ReviewItemRecord] = relationship(back_populates="evidence")
