@@ -4,9 +4,9 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
-from contractfit.domain import Evidence
+from contractfit.domain import Evidence, Opportunity
 
 
 class ReviewStatus(StrEnum):
@@ -128,6 +128,7 @@ class ReviewItem(BaseModel):
             raise ValueError("dismissed reviews cannot contain corrected_value")
         return self
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def priority_score(self) -> int:
         return calculate_priority_score(
@@ -136,6 +137,7 @@ class ReviewItem(BaseModel):
             reason=self.reason,
         )
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def priority(self) -> ReviewPriority:
         return priority_from_score(self.priority_score)
@@ -200,4 +202,29 @@ class ReviewItem(BaseModel):
 def review_sort_key(item: ReviewItem) -> tuple[int, float, datetime, str]:
     """Sort pending work by urgency, uncertainty, age, then stable identity."""
     return (-item.priority_score, item.confidence, item.created_at, str(item.id))
+
+
+def build_requirement_reviews(
+    opportunity: Opportunity,
+    organization_id: UUID,
+    *,
+    confidence_threshold: float = 0.75,
+) -> list[ReviewItem]:
+    """Create review candidates for uncertain extracted requirements."""
+    if not 0 <= confidence_threshold <= 1:
+        raise ValueError("confidence_threshold must be between zero and one")
+    return [
+        ReviewItem(
+            organization_id=organization_id,
+            opportunity_id=opportunity.id,
+            field_name=f"requirement:{requirement.id}",
+            extracted_value=requirement.description,
+            confidence=requirement.confidence,
+            mandatory=requirement.mandatory,
+            reason=ReviewReason.LOW_CONFIDENCE,
+            evidence=[requirement.evidence],
+        )
+        for requirement in opportunity.requirements
+        if requirement.confidence < confidence_threshold
+    ]
 

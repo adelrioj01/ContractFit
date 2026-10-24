@@ -8,6 +8,7 @@ from contractfit.domain import (
     ProcessingJob,
     SourceDocument,
 )
+from contractfit.review import ReviewItem, ReviewStatus, review_sort_key
 
 
 class ContractFitStore(Protocol):
@@ -25,6 +26,16 @@ class ContractFitStore(Protocol):
     def list_processing_jobs(self, document_id: UUID | None = None) -> list[ProcessingJob]: ...
     def save_opportunity(self, opportunity: Opportunity) -> Opportunity: ...
     def list_opportunities(self) -> list[Opportunity]: ...
+    def save_review_item(self, item: ReviewItem) -> ReviewItem: ...
+    def get_review_item(
+        self, review_id: UUID, organization_id: UUID
+    ) -> ReviewItem | None: ...
+    def list_review_items(
+        self,
+        organization_id: UUID,
+        status: ReviewStatus | None = None,
+        opportunity_id: UUID | None = None,
+    ) -> list[ReviewItem]: ...
 
 
 class InMemoryStore:
@@ -36,6 +47,7 @@ class InMemoryStore:
         self.document_pages: dict[UUID, list[DocumentPage]] = {}
         self.processing_jobs: dict[UUID, ProcessingJob] = {}
         self.opportunities: dict[UUID, Opportunity] = {}
+        self.review_items: dict[UUID, ReviewItem] = {}
 
     def reset(self) -> None:
         self.profile = None
@@ -43,6 +55,7 @@ class InMemoryStore:
         self.document_pages.clear()
         self.processing_jobs.clear()
         self.opportunities.clear()
+        self.review_items.clear()
 
     def save_profile(self, profile: CompanyProfile) -> CompanyProfile:
         self.profile = profile
@@ -91,3 +104,26 @@ class InMemoryStore:
 
     def list_opportunities(self) -> list[Opportunity]:
         return list(self.opportunities.values())
+
+    def save_review_item(self, item: ReviewItem) -> ReviewItem:
+        self.review_items[item.id] = item
+        return item
+
+    def get_review_item(self, review_id: UUID, organization_id: UUID) -> ReviewItem | None:
+        item = self.review_items.get(review_id)
+        return item if item is not None and item.organization_id == organization_id else None
+
+    def list_review_items(
+        self,
+        organization_id: UUID,
+        status: ReviewStatus | None = None,
+        opportunity_id: UUID | None = None,
+    ) -> list[ReviewItem]:
+        items = [
+            item
+            for item in self.review_items.values()
+            if item.organization_id == organization_id
+            and (status is None or item.status is status)
+            and (opportunity_id is None or item.opportunity_id == opportunity_id)
+        ]
+        return sorted(items, key=review_sort_key)
