@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>ContractFit</title>
   <style>
-    :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;background:#08111f;color:#e8eef8}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#15395a,#08111f 45%);min-height:100vh}main{max-width:1120px;margin:auto;padding:48px 24px}header{display:flex;justify-content:space-between;align-items:end;gap:24px;margin-bottom:32px}h1{font-size:clamp(2.4rem,7vw,5rem);line-height:.9;margin:0;letter-spacing:-.06em}h2{margin-top:36px}.eyebrow{color:#5eead4;text-transform:uppercase;letter-spacing:.16em;font-size:.75rem}.subtle{color:#91a4bd;max-width:620px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}.card{background:#101f33e0;border:1px solid #27435f;border-radius:18px;padding:22px;box-shadow:0 20px 50px #0005}.score{font-size:3rem;font-weight:800;color:#5eead4}.badge{display:inline-block;padding:5px 10px;border-radius:999px;background:#173f47;color:#88f7e5;font-size:.75rem}.gate{display:flex;justify-content:space-between;gap:12px;border-top:1px solid #27435f;padding:10px 0}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}.secondary{background:#29425d;color:#e8eef8}button{background:#5eead4;color:#06211e;border:0;border-radius:10px;padding:10px 16px;font-weight:700;cursor:pointer}button:disabled{cursor:wait;opacity:.6}button:focus-visible,input:focus-visible{outline:3px solid #f8d66d;outline-offset:3px}.upload-card{margin-bottom:8px}.upload-form{display:flex;flex-wrap:wrap;align-items:end;gap:14px;margin-top:18px}.field{display:grid;gap:7px;flex:1 1 320px}.field label{font-weight:700}.field input{width:100%;min-height:44px;padding:9px;border:1px solid #3f607e;border-radius:10px;background:#081523;color:#e8eef8}.upload-state{margin:14px 0 0;min-height:1.5em}.upload-state[data-kind="success"]{color:#88f7e5}.upload-state[data-kind="error"]{color:#fca5a5}.progress-wrap{display:none;margin-top:12px}.progress-wrap.visible{display:block}.progress-wrap progress{width:100%;height:10px;accent-color:#5eead4}.empty{grid-column:1/-1;color:#91a4bd}
+    :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;background:#08111f;color:#e8eef8}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#15395a,#08111f 45%);min-height:100vh}main{max-width:1120px;margin:auto;padding:48px 24px}header{display:flex;justify-content:space-between;align-items:end;gap:24px;margin-bottom:32px}h1{font-size:clamp(2.4rem,7vw,5rem);line-height:.9;margin:0;letter-spacing:-.06em}h2{margin-top:36px}.eyebrow{color:#5eead4;text-transform:uppercase;letter-spacing:.16em;font-size:.75rem}.subtle{color:#91a4bd;max-width:620px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}.card{background:#101f33e0;border:1px solid #27435f;border-radius:18px;padding:22px;box-shadow:0 20px 50px #0005}.score{font-size:3rem;font-weight:800;color:#5eead4}.badge{display:inline-block;padding:5px 10px;border-radius:999px;background:#173f47;color:#88f7e5;font-size:.75rem}.gate{display:flex;justify-content:space-between;gap:12px;border-top:1px solid #27435f;padding:10px 0}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}.secondary{background:#29425d;color:#e8eef8}button{background:#5eead4;color:#06211e;border:0;border-radius:10px;padding:10px 16px;font-weight:700;cursor:pointer}button:disabled{cursor:wait;opacity:.6}button:focus-visible,input:focus-visible{outline:3px solid #f8d66d;outline-offset:3px}.upload-card,.auth-card{margin-bottom:16px}.upload-form,.auth-form{display:flex;flex-wrap:wrap;align-items:end;gap:14px;margin-top:18px}.field{display:grid;gap:7px;flex:1 1 260px}.field label{font-weight:700}.field input{width:100%;min-height:44px;padding:9px;border:1px solid #3f607e;border-radius:10px;background:#081523;color:#e8eef8}.upload-state{margin:14px 0 0;min-height:1.5em}.upload-state[data-kind="success"]{color:#88f7e5}.upload-state[data-kind="error"]{color:#fca5a5}.progress-wrap{display:none;margin-top:12px}.progress-wrap.visible{display:block}.progress-wrap progress{width:100%;height:10px;accent-color:#5eead4}.empty{grid-column:1/-1;color:#91a4bd}
     @media(max-width:640px){main{padding:32px 16px}header{align-items:flex-start;flex-direction:column}.upload-form button{width:100%}}
   </style>
 </head>
@@ -15,6 +15,18 @@
     <div><div class="eyebrow">Evidence-grounded bid intelligence</div><h1>ContractFit</h1><p class="subtle">Rank government opportunities against real contractor constraints, with every decision linked to source evidence.</p></div>
     <button type="button" id="reset-demo">Reset demo</button>
   </header>
+
+  <section class="card auth-card" aria-labelledby="auth-heading">
+    <div class="eyebrow">Secure workspace</div>
+    <h2 id="auth-heading">Reviewer sign in</h2>
+    <form id="auth-form" class="auth-form">
+      <div class="field"><label for="auth-email">Email</label><input id="auth-email" type="email" value="demo@contractfit.local" autocomplete="username" required></div>
+      <div class="field"><label for="auth-password">Password</label><input id="auth-password" type="password" value="contractfit-demo-password" autocomplete="current-password" required></div>
+      <button type="submit">Sign in</button>
+      <button type="button" class="secondary" id="sign-out">Sign out</button>
+    </form>
+    <p id="auth-status" class="upload-state" role="status" aria-live="polite"></p>
+  </section>
 
   <section class="card upload-card" aria-labelledby="upload-heading">
     <div class="eyebrow">Document intelligence</div>
@@ -44,6 +56,8 @@
 const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const finiteNumber=(value,fallback=0)=>Number.isFinite(Number(value))?Number(value):fallback;
 async function json(response){if(!response.ok)throw new Error(`Request failed (${response.status})`);return response.json()}
+const authToken=()=>localStorage.getItem('contractfit-access-token');
+const authFetch=(url,options={})=>fetch(url,{...options,headers:{...(options.headers||{}),...(authToken()?{Authorization:`Bearer ${authToken()}`}:{})}});
 async function load(){
   try{
     const[p,o,m,e,jobs]=await Promise.all([
@@ -54,7 +68,15 @@ async function load(){
       fetch('/api/processing-jobs').then(json)
     ]);
     const activeJobs=jobs.filter(job=>['queued','processing'].includes(job.status)).length;
-    const reviews=await fetch(`/api/reviews?organization_id=${encodeURIComponent(p.organization_id)}&status=pending`).then(json);
+    let reviews=[];
+    if(authToken()){
+      try{
+        const me=await authFetch('/api/auth/me').then(json);
+        document.querySelector('#auth-status').textContent=`Signed in as ${me.display_name} · ${me.organization_name}`;
+        document.querySelector('#auth-status').dataset.kind='success';
+        reviews=await authFetch('/api/reviews?status=pending').then(json);
+      }catch(error){localStorage.removeItem('contractfit-access-token');document.querySelector('#auth-status').textContent='Your session expired. Sign in again.';document.querySelector('#auth-status').dataset.kind='error'}
+    }
     document.querySelector('#summary').innerHTML=`<article class="card"><div class="eyebrow">Contractor</div><h3>${esc(p.name)}</h3><p>${esc(p.capability_statement)}</p></article><article class="card"><div class="eyebrow">Pipeline</div><div class="score">${finiteNumber(o.length)}</div><p>opportunities evaluated</p></article><article class="card"><div class="eyebrow">Processing</div><div class="score">${activeJobs}</div><p>active document jobs</p></article><article class="card"><div class="eyebrow">Evaluation</div><div class="score">${Math.round(finiteNumber(e.eligibility_accuracy)*100)}%</div><p>eligibility accuracy · ${Math.round(finiteNumber(e.citation_validity)*100)}% valid citations</p></article>`;
     const byId=Object.fromEntries(o.map(item=>[item.id,item]));
     const cards=m.sort((a,b)=>finiteNumber(b.fit_score)-finiteNumber(a.fit_score)).map(match=>{
@@ -63,7 +85,7 @@ async function load(){
       return `<article class="card"><span class="badge">${esc(match.eligibility)}</span><div class="score">${finiteNumber(match.fit_score)}</div><h3>${esc(opportunity.title||'Untitled opportunity')}</h3><p>${esc(match.explanation)}</p>${gates.map(gate=>`<div class="gate"><span>${esc(gate.name)}</span><strong>${esc(gate.status)}</strong></div>`).join('')}<p class="subtle">Scoring: ${esc(match.scoring_method)}</p></article>`;
     }).join('');
     document.querySelector('#matches').innerHTML=cards||'<p class="empty">Upload a solicitation to create the first opportunity match.</p>';
-    document.querySelector('#reviews').innerHTML=reviews.map(review=>`<article class="card"><span class="badge">${esc(review.priority)} priority</span><h3>${esc(review.field_name)}</h3><p>${esc(review.extracted_value||'No value extracted')}</p><p class="subtle">Confidence: ${Math.round(finiteNumber(review.confidence)*100)}% · ${esc(review.reason)}</p><p>${esc(review.evidence?.[0]?.supporting_text||'No evidence excerpt')}</p><div class="actions"><button type="button" data-review-action="resolve" data-review-id="${esc(review.id)}">Correct</button><button type="button" class="secondary" data-review-action="dismiss" data-review-id="${esc(review.id)}">Dismiss</button></div></article>`).join('')||'<p class="empty">No pending reviews. Low-confidence extractions will appear here.</p>';
+    document.querySelector('#reviews').innerHTML=reviews.map(review=>`<article class="card"><span class="badge">${esc(review.priority)} priority</span><h3>${esc(review.field_name)}</h3><p>${esc(review.extracted_value||'No value extracted')}</p><p class="subtle">Confidence: ${Math.round(finiteNumber(review.confidence)*100)}% · ${esc(review.reason)}</p><p>${esc(review.evidence?.[0]?.supporting_text||'No evidence excerpt')}</p><div class="actions"><button type="button" data-review-action="resolve" data-review-id="${esc(review.id)}">Correct</button><button type="button" class="secondary" data-review-action="dismiss" data-review-id="${esc(review.id)}">Dismiss</button></div></article>`).join('')||(authToken()?'<p class="empty">No pending reviews. Low-confidence extractions will appear here.</p>':'<p class="empty">Sign in to view your organization’s review queue.</p>');
   }catch(error){
     document.querySelector('#matches').innerHTML=`<p class="empty">${esc(error instanceof Error?error.message:'Unable to load dashboard data.')}</p>`;
   }
@@ -72,11 +94,8 @@ async function load(){
 async function decideReview(event){
   const button=event.target.closest('[data-review-action]');
   if(!button)return;
-  const profile=await fetch('/api/profile').then(json);
-  const reviewerId=localStorage.getItem('contractfit-reviewer-id')||crypto.randomUUID();
-  localStorage.setItem('contractfit-reviewer-id',reviewerId);
   const action=button.dataset.reviewAction;
-  const body={organization_id:profile.organization_id,reviewer_id:reviewerId};
+  const body={};
   if(action==='resolve'){
     const correctedValue=prompt('Enter the verified value:');
     if(!correctedValue?.trim())return;
@@ -84,15 +103,27 @@ async function decideReview(event){
   }else if(!confirm('Dismiss this review item as not requiring a correction?'))return;
   button.disabled=true;
   try{
-    await fetch(`/api/reviews/${encodeURIComponent(button.dataset.reviewId)}/${action}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(json);
+    await authFetch(`/api/reviews/${encodeURIComponent(button.dataset.reviewId)}/${action}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(json);
     await load();
   }catch(error){alert(error instanceof Error?error.message:'Unable to save the review decision.');button.disabled=false}
 }
 
+async function signIn(event){
+  event.preventDefault();
+  const body=new URLSearchParams({username:document.querySelector('#auth-email').value,password:document.querySelector('#auth-password').value});
+  try{
+    const token=await fetch('/api/auth/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body}).then(json);
+    localStorage.setItem('contractfit-access-token',token.access_token);
+    await load();
+  }catch(error){document.querySelector('#auth-status').textContent='Incorrect email or password.';document.querySelector('#auth-status').dataset.kind='error'}
+}
+
+function signOut(){localStorage.removeItem('contractfit-access-token');document.querySelector('#auth-status').textContent='Signed out.';document.querySelector('#auth-status').dataset.kind='';load()}
+
 async function resetDemo(){
   const button=document.querySelector('#reset-demo');
   button.disabled=true;
-  try{await fetch('/api/demo/reset',{method:'POST'}).then(json);await load()}finally{button.disabled=false}
+  try{await authFetch('/api/demo/reset',{method:'POST'}).then(json);await load()}finally{button.disabled=false}
 }
 
 function setUploadState(message,kind=''){
@@ -184,6 +215,8 @@ function uploadDocument(event){
 document.querySelector('#reset-demo').addEventListener('click',resetDemo);
 document.querySelector('#upload-form').addEventListener('submit',uploadDocument);
 document.querySelector('#reviews').addEventListener('click',decideReview);
+document.querySelector('#auth-form').addEventListener('submit',signIn);
+document.querySelector('#sign-out').addEventListener('click',signOut);
 load();
 </script>
 </body>

@@ -29,7 +29,10 @@ with both plain text and image-only PDF inputs.
 
 ## Phase 1: foundation
 - API, PostgreSQL, Redis and Docker Compose.
-- Authentication and organization boundaries.
+- [x] Provider-independent organizations, user accounts, memberships and signed access tokens.
+- [x] Authenticated organization and reviewer identity for the human-review workflow.
+- Extend authenticated organization boundaries to profiles, documents, jobs and opportunities.
+- Password-login rate limiting, password reset and email verification.
 - Migrations, logging, tests and CI.
 
 ## Phase 2: company profiles

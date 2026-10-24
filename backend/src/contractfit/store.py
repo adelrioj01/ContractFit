@@ -1,6 +1,7 @@
 from typing import Protocol
 from uuid import UUID
 
+from contractfit.auth import AuthIdentity
 from contractfit.domain import (
     CompanyProfile,
     DocumentPage,
@@ -36,6 +37,9 @@ class ContractFitStore(Protocol):
         status: ReviewStatus | None = None,
         opportunity_id: UUID | None = None,
     ) -> list[ReviewItem]: ...
+    def register_identity(self, identity: AuthIdentity) -> AuthIdentity: ...
+    def get_identity_by_email(self, email: str) -> AuthIdentity | None: ...
+    def get_identity_by_user_id(self, user_id: UUID) -> AuthIdentity | None: ...
 
 
 class InMemoryStore:
@@ -48,6 +52,7 @@ class InMemoryStore:
         self.processing_jobs: dict[UUID, ProcessingJob] = {}
         self.opportunities: dict[UUID, Opportunity] = {}
         self.review_items: dict[UUID, ReviewItem] = {}
+        self.identities: dict[UUID, AuthIdentity] = {}
 
     def reset(self) -> None:
         self.profile = None
@@ -56,6 +61,7 @@ class InMemoryStore:
         self.processing_jobs.clear()
         self.opportunities.clear()
         self.review_items.clear()
+        self.identities.clear()
 
     def save_profile(self, profile: CompanyProfile) -> CompanyProfile:
         self.profile = profile
@@ -127,3 +133,23 @@ class InMemoryStore:
             and (opportunity_id is None or item.opportunity_id == opportunity_id)
         ]
         return sorted(items, key=review_sort_key)
+
+    def register_identity(self, identity: AuthIdentity) -> AuthIdentity:
+        if self.get_identity_by_email(identity.user.email) is not None:
+            raise ValueError("email is already registered")
+        self.identities[identity.user.id] = identity
+        return identity
+
+    def get_identity_by_email(self, email: str) -> AuthIdentity | None:
+        normalized = email.strip().lower()
+        return next(
+            (
+                identity
+                for identity in self.identities.values()
+                if identity.user.email == normalized
+            ),
+            None,
+        )
+
+    def get_identity_by_user_id(self, user_id: UUID) -> AuthIdentity | None:
+        return self.identities.get(user_id)

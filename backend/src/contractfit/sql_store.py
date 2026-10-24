@@ -3,7 +3,15 @@ from uuid import UUID
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.sql.elements import ColumnElement
 
+from contractfit.auth import (
+    AuthIdentity,
+    Organization,
+    OrganizationMembership,
+    OrganizationRole,
+    UserAccount,
+)
 from contractfit.database import transaction
 from contractfit.domain import (
     CompanyProfile,
@@ -21,13 +29,20 @@ from contractfit.persistence_models import (
     CompanyProfileRecord,
     DocumentPageRecord,
     OpportunityRecord,
+    OrganizationMembershipRecord,
+    OrganizationRecord,
     ProcessingJobRecord,
     RequirementRecord,
     ReviewEvidenceRecord,
     ReviewItemRecord,
     SourceDocumentRecord,
+    UserAccountRecord,
 )
 from contractfit.review import ReviewItem, ReviewReason, ReviewStatus, review_sort_key
+
+
+def _ensure_aware(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value
 
 
 class SqlAlchemyStore:
@@ -44,6 +59,9 @@ class SqlAlchemyStore:
             session.execute(delete(DocumentPageRecord))
             session.execute(delete(SourceDocumentRecord))
             session.execute(delete(CompanyProfileRecord))
+            session.execute(delete(OrganizationMembershipRecord))
+            session.execute(delete(UserAccountRecord))
+            session.execute(delete(OrganizationRecord))
 
     def get_profile(self) -> CompanyProfile | None:
         with transaction(self.session_factory) as session:
@@ -197,6 +215,72 @@ class SqlAlchemyStore:
             return sorted(
                 [self._review_from_record(record) for record in records],
                 key=review_sort_key,
+            )
+
+    def register_identity(self, identity: AuthIdentity) -> AuthIdentity:
+        with transaction(self.session_factory) as session:
+            existing = session.scalars(
+                select(UserAccountRecord).where(
+                    UserAccountRecord.email == identity.user.email
+                )
+            ).first()
+            if existing is not None:
+                raise ValueError("email is already registered")
+            session.add(OrganizationRecord(**identity.organization.model_dump()))
+            session.add(UserAccountRecord(**identity.user.model_dump()))
+            session.flush()
+            membership = identity.membership.model_dump()
+            membership["role"] = identity.membership.role.value
+            session.add(OrganizationMembershipRecord(**membership))
+        return identity
+
+    def get_identity_by_email(self, email: str) -> AuthIdentity | None:
+        return self._get_identity(UserAccountRecord.email == email.strip().lower())
+
+    def get_identity_by_user_id(self, user_id: UUID) -> AuthIdentity | None:
+        return self._get_identity(UserAccountRecord.id == user_id)
+
+    def _get_identity(self, criterion: ColumnElement[bool]) -> AuthIdentity | None:
+        with transaction(self.session_factory) as session:
+            row = session.execute(
+                select(
+                    UserAccountRecord,
+                    OrganizationMembershipRecord,
+                    OrganizationRecord,
+                )
+                .join(
+                    OrganizationMembershipRecord,
+                    OrganizationMembershipRecord.user_id == UserAccountRecord.id,
+                )
+                .join(
+                    OrganizationRecord,
+                    OrganizationRecord.id == OrganizationMembershipRecord.organization_id,
+                )
+                .where(criterion)
+            ).first()
+            if row is None:
+                return None
+            user, membership, organization = row
+            return AuthIdentity(
+                user=UserAccount(
+                    id=user.id,
+                    email=user.email,
+                    display_name=user.display_name,
+                    password_hash=user.password_hash,
+                    is_active=user.is_active,
+                    created_at=_ensure_aware(user.created_at),
+                ),
+                organization=Organization(
+                    id=organization.id,
+                    name=organization.name,
+                    created_at=_ensure_aware(organization.created_at),
+                ),
+                membership=OrganizationMembership(
+                    organization_id=membership.organization_id,
+                    user_id=membership.user_id,
+                    role=OrganizationRole(membership.role),
+                    created_at=_ensure_aware(membership.created_at),
+                ),
             )
 
     @staticmethod

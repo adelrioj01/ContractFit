@@ -11,6 +11,7 @@ from contractfit.api import (
     get_store,
     router,
     seed_demo,
+    seed_demo_identity,
 )
 from contractfit.config import get_settings
 from contractfit.database import build_engine, build_session_factory
@@ -29,8 +30,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         build_processing_queue(settings),
         build_document_processor(settings, get_store()),
     )
-    if settings.seed_demo_data and get_store().get_profile() is None:
-        seed_demo()
+    if settings.seed_demo_data:
+        if get_store().get_profile() is None:
+            seed_demo()
+        else:
+            seed_demo_identity()
     yield
 
 
