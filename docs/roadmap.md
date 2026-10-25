@@ -59,10 +59,11 @@ with both plain text and image-only PDF inputs.
 - Replace the dashboard's local reviewer identity with authenticated user identity.
 
 ## Phase 5: matching
-- Deterministic hard gates.
-- Weighted scoring.
-- Semantic past-performance matching.
-- Evidence-grounded explanations.
+- [x] Deterministic hard gates.
+- [x] Weighted scoring.
+- [x] Cached local embeddings and pgvector cosine retrieval for capabilities and scopes.
+- Semantic past-performance matching with labeled ranking evaluation.
+- [x] Evidence-grounded explanations.
 
 ## Phase 6: product workflow
 - Ranked opportunity dashboard.

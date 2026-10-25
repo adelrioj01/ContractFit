@@ -1,3 +1,4 @@
+import math
 from typing import Protocol
 from uuid import UUID
 
@@ -9,6 +10,7 @@ from contractfit.domain import (
     ProcessingJob,
     SourceDocument,
 )
+from contractfit.embeddings import EmbeddingHit, EmbeddingTarget, SemanticEmbedding
 from contractfit.review import ReviewItem, ReviewStatus, review_sort_key
 
 
@@ -27,6 +29,22 @@ class ContractFitStore(Protocol):
     def list_processing_jobs(self, document_id: UUID | None = None) -> list[ProcessingJob]: ...
     def save_opportunity(self, opportunity: Opportunity) -> Opportunity: ...
     def list_opportunities(self) -> list[Opportunity]: ...
+    def get_embedding(
+        self,
+        target: EmbeddingTarget,
+        target_id: UUID,
+        model: str,
+        content_sha256: str,
+    ) -> SemanticEmbedding | None: ...
+    def save_embedding(self, embedding: SemanticEmbedding) -> SemanticEmbedding: ...
+    def search_embeddings(
+        self,
+        target: EmbeddingTarget,
+        model: str,
+        query_vector: list[float],
+        limit: int,
+        organization_id: UUID | None = None,
+    ) -> list[EmbeddingHit]: ...
     def save_review_item(self, item: ReviewItem) -> ReviewItem: ...
     def get_review_item(
         self, review_id: UUID, organization_id: UUID
@@ -51,6 +69,7 @@ class InMemoryStore:
         self.document_pages: dict[UUID, list[DocumentPage]] = {}
         self.processing_jobs: dict[UUID, ProcessingJob] = {}
         self.opportunities: dict[UUID, Opportunity] = {}
+        self.embeddings: dict[tuple[EmbeddingTarget, UUID, str], SemanticEmbedding] = {}
         self.review_items: dict[UUID, ReviewItem] = {}
         self.identities: dict[UUID, AuthIdentity] = {}
 
@@ -60,6 +79,7 @@ class InMemoryStore:
         self.document_pages.clear()
         self.processing_jobs.clear()
         self.opportunities.clear()
+        self.embeddings.clear()
         self.review_items.clear()
         self.identities.clear()
 
@@ -110,6 +130,48 @@ class InMemoryStore:
 
     def list_opportunities(self) -> list[Opportunity]:
         return list(self.opportunities.values())
+
+    def get_embedding(
+        self,
+        target: EmbeddingTarget,
+        target_id: UUID,
+        model: str,
+        content_sha256: str,
+    ) -> SemanticEmbedding | None:
+        embedding = self.embeddings.get((target, target_id, model))
+        if embedding is None or embedding.content_sha256 != content_sha256:
+            return None
+        return embedding
+
+    def save_embedding(self, embedding: SemanticEmbedding) -> SemanticEmbedding:
+        self.embeddings[(embedding.target, embedding.target_id, embedding.model)] = embedding
+        return embedding
+
+    def search_embeddings(
+        self,
+        target: EmbeddingTarget,
+        model: str,
+        query_vector: list[float],
+        limit: int,
+        organization_id: UUID | None = None,
+    ) -> list[EmbeddingHit]:
+        def cosine_score(vector: list[float]) -> float:
+            dot = sum(left * right for left, right in zip(query_vector, vector, strict=True))
+            query_norm = math.sqrt(sum(value * value for value in query_vector))
+            vector_norm = math.sqrt(sum(value * value for value in vector))
+            if query_norm == 0 or vector_norm == 0:
+                return 0.0
+            return float(max(0.0, min(1.0, dot / (query_norm * vector_norm))))
+
+        candidates = [
+            item
+            for item in self.embeddings.values()
+            if item.target is target
+            and item.model == model
+            and item.organization_id == organization_id
+        ]
+        hits = [EmbeddingHit(target_id=item.target_id, score=cosine_score(item.vector)) for item in candidates]
+        return sorted(hits, key=lambda item: item.score, reverse=True)[:limit]
 
     def save_review_item(self, item: ReviewItem) -> ReviewItem:
         self.review_items[item.id] = item

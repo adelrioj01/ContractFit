@@ -78,6 +78,7 @@ This repository now contains a working vertical-slice MVP:
 - Local Tesseract OCR for scanned PDF pages
 - Deterministic deadline, territory, set-aside, certification, and capacity gates
 - Hybrid fit scoring with an optional local Ollama model and an offline fallback
+- Cached Ollama embeddings with pgvector cosine search and lexical fallback
 - An explainable ranked-opportunity dashboard at `http://localhost:8000`
 - Organization accounts, Argon2 password hashing, signed access tokens and authenticated reviews
 - A labeled evaluation set measuring extraction recall, citation validity, and eligibility accuracy
@@ -106,6 +107,18 @@ the default signing secret; set a private `AUTH_SECRET_KEY` of at least 32 chara
 The default `AI_PROVIDER=offline` makes development deterministic. To exercise local-model
 scoring, run Ollama, download the configured model, and set `AI_PROVIDER=ollama` in `.env`.
 The matching service falls back safely if the local model is unavailable.
+
+Vector retrieval is independently controlled by `EMBEDDING_PROVIDER`. To enable local embeddings:
+
+```bash
+ollama pull nomic-embed-text
+```
+
+Then set `EMBEDDING_PROVIDER=ollama` in `.env`. ContractFit embeds the contractor capability
+statement and opportunity scopes, caches 768-dimensional vectors in PostgreSQL/pgvector, and
+uses cosine similarity as the semantic portion of the fit score. Text hashes prevent unchanged
+content from being embedded again. If Ollama is unavailable, matching falls back to the existing
+scorer and the deterministic eligibility gates still run.
 
 Docker Compose runs document parsing, OCR and extraction in the `worker` service. Direct backend
 development defaults to `PROCESSING_MODE=inline`, keeping tests and one-process demos simple.

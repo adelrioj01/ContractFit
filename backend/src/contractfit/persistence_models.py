@@ -2,11 +2,13 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     JSON,
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Numeric,
     String,
     Text,
@@ -69,6 +71,30 @@ class CompanyProfileRecord(Base):
     set_asides: Mapped[list[str]] = mapped_column(JSON)
     naics_codes: Mapped[list[str]] = mapped_column(JSON)
     capability_statement: Mapped[str] = mapped_column(Text)
+
+
+class SemanticEmbeddingRecord(Base):
+    __tablename__ = "semantic_embeddings"
+    __table_args__ = (
+        UniqueConstraint("target", "target_id", "model", name="uq_semantic_embedding_target"),
+        Index(
+            "ix_semantic_embeddings_vector_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    target: Mapped[str] = mapped_column(String(50), index=True)
+    target_id: Mapped[UUID] = mapped_column(Uuid, index=True)
+    organization_id: Mapped[UUID | None] = mapped_column(Uuid, index=True)
+    model: Mapped[str] = mapped_column(String(255), index=True)
+    content_sha256: Mapped[str] = mapped_column(String(64))
+    embedding: Mapped[list[float]] = mapped_column(
+        Vector(768).with_variant(JSON, "sqlite")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class SourceDocumentRecord(Base):
