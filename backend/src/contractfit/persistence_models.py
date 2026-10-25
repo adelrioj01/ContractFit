@@ -8,6 +8,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Numeric,
     String,
     Text,
@@ -76,6 +77,12 @@ class SemanticEmbeddingRecord(Base):
     __tablename__ = "semantic_embeddings"
     __table_args__ = (
         UniqueConstraint("target", "target_id", "model", name="uq_semantic_embedding_target"),
+        Index(
+            "ix_semantic_embeddings_vector_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
