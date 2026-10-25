@@ -62,7 +62,8 @@ with both plain text and image-only PDF inputs.
 - [x] Deterministic hard gates.
 - [x] Weighted scoring.
 - [x] Cached local embeddings and pgvector cosine retrieval for capabilities and scopes.
-- [x] Eight-case semantic ranking baseline with Top-1, Recall@3 and MRR metrics.
+- [x] Thirty-case semantic ranking baseline with Top-1, Recall@3 and MRR metrics.
+- [x] Reproducible CLI runner for lexical and local Ollama embedding evaluation.
 - Semantic past-performance matching and expansion to at least 100 labeled ranking cases.
 - [x] Evidence-grounded explanations.
 

@@ -31,6 +31,7 @@ data/
 uploads/
 logs/
 *.log
+ranking-report*.json
 
 # Editors and operating systems
 .DS_Store
