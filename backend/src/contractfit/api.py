@@ -33,9 +33,20 @@ from contractfit.domain import (
     ProcessingStage,
     SourceDocument,
 )
-from contractfit.embeddings import EmbeddingService, OllamaEmbeddingProvider
-from contractfit.evaluation import EvaluationCase, EvaluationReport, evaluate
-from contractfit.evaluation_dataset import EVALUATION_CASES
+from contractfit.embeddings import (
+    EmbeddingService,
+    EmbeddingSimilarityScorer,
+    OllamaEmbeddingProvider,
+)
+from contractfit.evaluation import (
+    EvaluationCase,
+    EvaluationReport,
+    RankingComparisonReport,
+    RankingEvaluationCase,
+    compare_rankers,
+    evaluate,
+)
+from contractfit.evaluation_dataset import EVALUATION_CASES, RANKING_EVALUATION_CASES
 from contractfit.extraction import RequirementExtractor
 from contractfit.file_storage import FileStorageError, LocalFileStorage
 from contractfit.job_queue import InMemoryJobQueue, ProcessingJobQueue
@@ -567,3 +578,31 @@ def get_evaluation() -> EvaluationReport:
         raise HTTPException(status_code=409, detail="Create a contractor profile first")
     cases = [EvaluationCase.model_validate(item) for item in EVALUATION_CASES]
     return evaluate(cases, profile)
+
+
+@router.get("/evaluation/ranking", response_model=RankingComparisonReport)
+def get_ranking_evaluation() -> RankingComparisonReport:
+    from contractfit.ai import LexicalSemanticScorer
+
+    cases = [RankingEvaluationCase.model_validate(item) for item in RANKING_EVALUATION_CASES]
+    lexical = LexicalSemanticScorer()
+    settings = get_settings()
+    if settings.embedding_provider != "ollama":
+        return compare_rankers(
+            cases,
+            lexical,
+            note="Enable EMBEDDING_PROVIDER=ollama to compare the configured embedding model.",
+        )
+    try:
+        provider = OllamaEmbeddingProvider(
+            settings.ollama_base_url,
+            settings.embedding_model,
+            settings.embedding_dimensions,
+        )
+        return compare_rankers(cases, lexical, EmbeddingSimilarityScorer(provider))
+    except (httpx.HTTPError, KeyError, TypeError, ValueError):
+        return compare_rankers(
+            cases,
+            lexical,
+            note="The configured embedding provider was unavailable; lexical results are shown.",
+        )
