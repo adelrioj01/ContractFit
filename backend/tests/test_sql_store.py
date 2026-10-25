@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 
@@ -44,3 +46,28 @@ def test_sql_store_round_trip_preserves_evidence() -> None:
     store.reset()
     assert store.get_profile() is None
     assert store.list_opportunities() == []
+
+
+def test_sql_store_scopes_profiles_by_organization() -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    store = SqlAlchemyStore(build_session_factory(engine))
+    other_organization_id = uuid4()
+    other_profile = SAMPLE_PROFILE.model_copy(
+        update={
+            "id": uuid4(),
+            "organization_id": other_organization_id,
+            "name": "Other Facilities",
+        }
+    )
+
+    store.save_profile(SAMPLE_PROFILE)
+    store.save_profile(other_profile)
+
+    assert store.get_profile(SAMPLE_PROFILE.organization_id) == SAMPLE_PROFILE
+    assert store.get_profile(other_organization_id) == other_profile
+    assert store.get_profile(uuid4()) is None

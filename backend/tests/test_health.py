@@ -24,8 +24,8 @@ def test_demo_vertical_slice() -> None:
     assert identity is not None
     assert reset_demo(identity)["opportunities"] == 1
     opportunities = list_opportunities()
-    matches = list_matches()
-    evaluation = get_evaluation()
+    matches = list_matches(identity)
+    evaluation = get_evaluation(identity)
 
     assert len(opportunities) == 1
     assert matches[0].eligibility == "eligible"

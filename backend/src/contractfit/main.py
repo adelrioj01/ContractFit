@@ -16,6 +16,7 @@ from contractfit.api import (
 from contractfit.config import get_settings
 from contractfit.database import build_engine, build_session_factory
 from contractfit.runtime import build_document_processor, build_processing_queue
+from contractfit.sample_data import SAMPLE_PROFILE
 from contractfit.sql_store import SqlAlchemyStore
 
 settings = get_settings()
@@ -31,7 +32,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         build_document_processor(settings, get_store()),
     )
     if settings.seed_demo_data:
-        if get_store().get_profile() is None:
+        if get_store().get_profile(SAMPLE_PROFILE.organization_id) is None:
             seed_demo()
         else:
             seed_demo_identity()

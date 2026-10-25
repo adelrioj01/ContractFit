@@ -16,7 +16,7 @@ from contractfit.review import ReviewItem, ReviewStatus, review_sort_key
 
 class ContractFitStore(Protocol):
     def reset(self) -> None: ...
-    def get_profile(self) -> CompanyProfile | None: ...
+    def get_profile(self, organization_id: UUID | None = None) -> CompanyProfile | None: ...
     def save_profile(self, profile: CompanyProfile) -> CompanyProfile: ...
     def save_document(self, document: SourceDocument) -> SourceDocument: ...
     def get_document(self, document_id: UUID) -> SourceDocument | None: ...
@@ -64,7 +64,7 @@ class InMemoryStore:
     """Replaceable repository for the first vertical slice and local demos."""
 
     def __init__(self) -> None:
-        self.profile: CompanyProfile | None = None
+        self.profiles: dict[UUID, CompanyProfile] = {}
         self.documents: dict[UUID, SourceDocument] = {}
         self.document_pages: dict[UUID, list[DocumentPage]] = {}
         self.processing_jobs: dict[UUID, ProcessingJob] = {}
@@ -74,7 +74,7 @@ class InMemoryStore:
         self.identities: dict[UUID, AuthIdentity] = {}
 
     def reset(self) -> None:
-        self.profile = None
+        self.profiles.clear()
         self.documents.clear()
         self.document_pages.clear()
         self.processing_jobs.clear()
@@ -84,11 +84,15 @@ class InMemoryStore:
         self.identities.clear()
 
     def save_profile(self, profile: CompanyProfile) -> CompanyProfile:
-        self.profile = profile
+        self.profiles[profile.organization_id] = profile
         return profile
 
-    def get_profile(self) -> CompanyProfile | None:
-        return self.profile
+    def get_profile(self, organization_id: UUID | None = None) -> CompanyProfile | None:
+        if organization_id is not None:
+            return self.profiles.get(organization_id)
+        # Temporary compatibility path for background processing. Documents and
+        # jobs will supply an organization once their tenant boundary is added.
+        return next(iter(self.profiles.values()), None)
 
     def save_document(self, document: SourceDocument) -> SourceDocument:
         self.documents[document.id] = document
