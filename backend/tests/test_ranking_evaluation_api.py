@@ -14,8 +14,8 @@ def test_ranking_evaluation_api_returns_reproducible_lexical_baseline(
     finally:
         get_settings.cache_clear()
 
-    assert report.cases == 8
-    assert report.lexical.cases == 8
+    assert report.cases == 30
+    assert report.lexical.cases == 30
     assert report.embedding is None
     assert report.embedding_available is False
     assert report.mrr_delta is None

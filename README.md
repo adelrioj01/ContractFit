@@ -121,11 +121,22 @@ uses cosine similarity as the semantic portion of the fit score. Text hashes pre
 content from being embedded again. If Ollama is unavailable, matching falls back to the existing
 scorer and the deterministic eligibility gates still run.
 
-`GET /api/evaluation/ranking` evaluates eight labeled semantic-retrieval cases. It always reports
+`GET /api/evaluation/ranking` evaluates 30 hand-authored synthetic semantic-retrieval cases. It always reports
 the reproducible lexical baseline and, when Ollama embeddings are enabled, reports the embedding
 model's Top-1 accuracy, Recall@3, mean reciprocal rank (MRR), and MRR improvement. The initial
-lexical baseline is Top-1 `0.375`, Recall@3 `0.625`, and MRR `0.5521`; these are regression
+lexical baseline is Top-1 `0.3667`, Recall@3 `0.4333`, and MRR `0.5306`; these are regression
 baselines, not claims about production accuracy.
+
+Run the same evaluation from the command line and optionally save the JSON report:
+
+```bash
+cd backend
+uv run python -m contractfit.ranking_cli --provider lexical
+uv run python -m contractfit.ranking_cli --provider ollama --output ranking-report.json
+```
+
+The Ollama command requires the configured embedding model to be installed and running. A report
+is only considered a measured model result when that command completes successfully.
 
 Docker Compose runs document parsing, OCR and extraction in the `worker` service. Direct backend
 development defaults to `PROCESSING_MODE=inline`, keeping tests and one-process demos simple.

@@ -128,3 +128,167 @@ RANKING_EVALUATION_CASES: list[dict[str, object]] = [
         "relevant_ids": ["steam"],
     },
 ]
+
+
+def _additional_ranking_case(
+    name: str,
+    query: str,
+    relevant: str,
+    distractors: tuple[str, str, str],
+) -> dict[str, object]:
+    return {
+        "name": name,
+        "query": query,
+        "candidates": [
+            {"id": "distractor-1", "text": distractors[0]},
+            {"id": "relevant", "text": relevant},
+            {"id": "distractor-2", "text": distractors[1]},
+            {"id": "distractor-3", "text": distractors[2]},
+        ],
+        "relevant_ids": ["relevant"],
+    }
+
+
+_COMMON_DISTRACTORS = (
+    "Nightly office cleaning and restroom consumable restocking.",
+    "Seasonal landscape mowing and irrigation inspection.",
+    "Administrative records scanning and document indexing.",
+)
+
+
+RANKING_EVALUATION_CASES.extend(
+    [
+        _additional_ranking_case(
+            "fire alarm life safety",
+            "NICET technicians inspect fire alarms, notification devices and life-safety controls.",
+            "Testing of detection panels, horns, strobes and emergency signaling systems.",
+            _COMMON_DISTRACTORS,
+        ),
+        _additional_ranking_case(
+            "elevator preventive service",
+            "Licensed mechanics maintain elevators, lifts and vertical transportation equipment.",
+            "Hoist, cab, controller and conveyance preventive maintenance with callout repair.",
+            _COMMON_DISTRACTORS,
+        ),
+        _additional_ranking_case(
+            "roof envelope repair",
+            "Commercial roof inspection, waterproofing and storm-leak response.",
+            "Membrane, flashing and building-envelope repair for water intrusion.",
+            _COMMON_DISTRACTORS,
+        ),
+        _additional_ranking_case(
+            "physical security operations",
+            "Uniformed guards provide patrol, visitor screening and access control.",
+            "Protective security officers staff entrances and conduct facility rounds.",
+            _COMMON_DISTRACTORS,
+        ),
+        _additional_ranking_case(
+            "solid waste and recycling",
+            "We collect refuse, recycling and bulky waste from institutional sites.",
+            "Scheduled trash hauling, container service and recyclable-material recovery.",
+            _COMMON_DISTRACTORS,
+        ),
+        _additional_ranking_case(
+            "winter weather response",
+            "Snow plowing, ice control and sidewalk deicing for public campuses.",
+            "Winter storm response with pavement clearing and anti-icing treatment.",
+            _COMMON_DISTRACTORS,
+        ),
+        _additional_ranking_case(
+            "protective coatings",
+            "Interior painting, exterior coatings and surface preparation.",
+            "Wall and structural finish application with lead-safe preparation.",
+            _COMMON_DISTRACTORS,
+        ),
+        _additional_ranking_case(
+            "commercial flooring",
+            "Carpet, tile and resilient flooring replacement in occupied buildings.",
+            "Floor-covering installation including LVT, sheet goods and carpet systems.",
+            _COMMON_DISTRACTORS,
+        ),
+        _additional_ranking_case(
+            "locksmith and door hardware",
+            "Locksmiths service master-key systems, locks and door hardware.",
+            "Rekeying, cylinder replacement and physical access hardware repair.",
+            _COMMON_DISTRACTORS,
+        ),
+        _additional_ranking_case(
+            "standby power systems",
+            "Technicians load-test generators and maintain emergency backup power.",
+            "Genset inspection, fuel-system service and automatic transfer-switch testing.",
+            _COMMON_DISTRACTORS,
+        ),
+        _additional_ranking_case(
+            "commercial kitchen equipment",
+            "Repair of institutional ovens, cooking lines and refrigeration equipment.",
+            "Food-service appliance maintenance for ranges, walk-ins and dish machines.",
+            _COMMON_DISTRACTORS,
+        ),
+        _additional_ranking_case(
+            "aquatic facility operations",
+            "Pool operators manage chlorine chemistry, filtration and aquatic safety.",
+            "Natatorium water treatment, pump service and swimming-facility operations.",
+            _COMMON_DISTRACTORS,
+        ),
+        _additional_ranking_case(
+            "cooling tower water treatment",
+            "Water-treatment specialists control scale, corrosion and Legionella risk.",
+            "Cooling-tower chemical management, sampling and biological control.",
+            _COMMON_DISTRACTORS,
+        ),
+        _additional_ranking_case(
+            "mold remediation",
+            "Certified teams remediate mold and moisture damage with containment.",
+            "Microbial cleanup, negative-air isolation and damp-material removal.",
+            _COMMON_DISTRACTORS,
+        ),
+        _additional_ranking_case(
+            "hazardous material abatement",
+            "Licensed crews perform asbestos and lead-paint abatement.",
+            "Hazardous building-material removal with regulated containment and disposal.",
+            _COMMON_DISTRACTORS,
+        ),
+        _additional_ranking_case(
+            "window and glazing service",
+            "Glaziers replace windows, storefront glass and curtain-wall seals.",
+            "Architectural glazing repair, insulated glass replacement and resealing.",
+            _COMMON_DISTRACTORS,
+        ),
+        _additional_ranking_case(
+            "masonry restoration",
+            "Masons repair brick, concrete and deteriorated mortar joints.",
+            "Tuckpointing, façade masonry stabilization and cast-concrete patching.",
+            _COMMON_DISTRACTORS,
+        ),
+        _additional_ranking_case(
+            "parking pavement maintenance",
+            "Parking-lot asphalt repair, sealcoating and traffic striping.",
+            "Pavement resurfacing, crack sealing and stall-marking restoration.",
+            _COMMON_DISTRACTORS,
+        ),
+        _additional_ranking_case(
+            "fleet maintenance",
+            "Mechanics maintain municipal vehicles, light trucks and fleet equipment.",
+            "Automotive preventive service, diagnostics and garage repair operations.",
+            _COMMON_DISTRACTORS,
+        ),
+        _additional_ranking_case(
+            "institutional laundry",
+            "Laundry operations process hospital linens, uniforms and textiles.",
+            "Commercial washing, drying, folding and linen distribution service.",
+            _COMMON_DISTRACTORS,
+        ),
+        _additional_ranking_case(
+            "loading dock equipment",
+            "Technicians repair dock levelers, overhead doors and vehicle restraints.",
+            "Loading-bay equipment maintenance for roll-up doors and dock lifts.",
+            _COMMON_DISTRACTORS,
+        ),
+        _additional_ranking_case(
+            "water damage restoration",
+            "Emergency crews extract flood water and dry damaged facilities.",
+            "Rapid water-loss mitigation, structural drying and humidity control.",
+            _COMMON_DISTRACTORS,
+        ),
+    ]
+)
