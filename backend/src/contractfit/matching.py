@@ -17,7 +17,12 @@ class OpportunityMatcher:
     def __init__(self, semantic_scorer: SemanticScorer | None = None) -> None:
         self.semantic_scorer = semantic_scorer or LexicalSemanticScorer()
 
-    def match(self, profile: CompanyProfile, opportunity: Opportunity) -> MatchResult:
+    def match(
+        self,
+        profile: CompanyProfile,
+        opportunity: Opportunity,
+        semantic_override: tuple[float, str, str] | None = None,
+    ) -> MatchResult:
         gates = [
             self._deadline_gate(opportunity),
             self._location_gate(profile, opportunity),
@@ -32,17 +37,10 @@ class OpportunityMatcher:
         else:
             eligibility = EligibilityStatus.ELIGIBLE
 
-        try:
-            semantic_score, semantic_reason = self.semantic_scorer.score(
-                profile.capability_statement, opportunity.scope
-            )
-            method = self.semantic_scorer.name
-        except (httpx.HTTPError, KeyError, TypeError, ValueError):
-            fallback = LexicalSemanticScorer()
-            semantic_score, semantic_reason = fallback.score(
-                profile.capability_statement, opportunity.scope
-            )
-            method = f"{fallback.name}-after-model-error"
+        if semantic_override is not None:
+            semantic_score, semantic_reason, method = semantic_override
+        else:
+            semantic_score, semantic_reason, method = self._semantic_score(profile, opportunity)
 
         eligible_ratio = sum(g.status == EligibilityStatus.ELIGIBLE for g in gates) / len(gates)
         score = round((semantic_score * 0.65 + eligible_ratio * 0.35) * 100, 1)
@@ -61,6 +59,22 @@ class OpportunityMatcher:
             gaps=gaps,
             explanation=f"{semantic_reason} Hard-gate result: {eligibility.value}.",
         )
+
+    def _semantic_score(
+        self, profile: CompanyProfile, opportunity: Opportunity
+    ) -> tuple[float, str, str]:
+        try:
+            semantic_score, semantic_reason = self.semantic_scorer.score(
+                profile.capability_statement, opportunity.scope
+            )
+            method = self.semantic_scorer.name
+        except (httpx.HTTPError, KeyError, TypeError, ValueError):
+            fallback = LexicalSemanticScorer()
+            semantic_score, semantic_reason = fallback.score(
+                profile.capability_statement, opportunity.scope
+            )
+            method = f"{fallback.name}-after-model-error"
+        return semantic_score, semantic_reason, method
 
     @staticmethod
     def _evidence(opportunity: Opportunity, category: str) -> Evidence | None:

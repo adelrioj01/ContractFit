@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Annotated
 from uuid import UUID, uuid4
 
+import httpx
 import jwt
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -32,6 +33,7 @@ from contractfit.domain import (
     ProcessingStage,
     SourceDocument,
 )
+from contractfit.embeddings import EmbeddingService, OllamaEmbeddingProvider
 from contractfit.evaluation import EvaluationCase, EvaluationReport, evaluate
 from contractfit.evaluation_dataset import EVALUATION_CASES
 from contractfit.extraction import RequirementExtractor
@@ -523,7 +525,39 @@ def list_matches() -> list[MatchResult]:
     if profile is None:
         raise HTTPException(status_code=409, detail="Create a contractor profile first")
     matcher = _matcher()
-    return [matcher.match(profile, item) for item in _store.list_opportunities()]
+    opportunities = _store.list_opportunities()
+    settings = get_settings()
+    embedding_scores: dict[UUID, float] = {}
+    if settings.embedding_provider == "ollama":
+        try:
+            provider = OllamaEmbeddingProvider(
+                settings.ollama_base_url,
+                settings.embedding_model,
+                settings.embedding_dimensions,
+            )
+            embedding_scores = EmbeddingService(provider, _store).score_opportunities(
+                profile,
+                opportunities,
+                settings.embedding_match_limit,
+            )
+        except (httpx.HTTPError, KeyError, TypeError, ValueError):
+            embedding_scores = {}
+
+    results = [
+        matcher.match(
+            profile,
+            item,
+            semantic_override=(
+                embedding_scores[item.id],
+                f"Embedding cosine similarity is {embedding_scores[item.id]:.0%}.",
+                f"embedding-cosine:{settings.embedding_model}",
+            )
+            if item.id in embedding_scores
+            else None,
+        )
+        for item in opportunities
+    ]
+    return sorted(results, key=lambda item: item.fit_score, reverse=True)
 
 
 @router.get("/evaluation", response_model=EvaluationReport)

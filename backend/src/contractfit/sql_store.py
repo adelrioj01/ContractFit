@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import cast
 from uuid import UUID
 
 from sqlalchemy import delete, select
@@ -25,6 +26,7 @@ from contractfit.domain import (
     Requirement,
     SourceDocument,
 )
+from contractfit.embeddings import EmbeddingHit, EmbeddingTarget, SemanticEmbedding
 from contractfit.persistence_models import (
     CompanyProfileRecord,
     DocumentPageRecord,
@@ -35,6 +37,7 @@ from contractfit.persistence_models import (
     RequirementRecord,
     ReviewEvidenceRecord,
     ReviewItemRecord,
+    SemanticEmbeddingRecord,
     SourceDocumentRecord,
     UserAccountRecord,
 )
@@ -51,6 +54,7 @@ class SqlAlchemyStore:
 
     def reset(self) -> None:
         with transaction(self.session_factory) as session:
+            session.execute(delete(SemanticEmbeddingRecord))
             session.execute(delete(ReviewEvidenceRecord))
             session.execute(delete(ReviewItemRecord))
             session.execute(delete(RequirementRecord))
@@ -166,6 +170,76 @@ class SqlAlchemyStore:
         with transaction(self.session_factory) as session:
             records = session.scalars(select(OpportunityRecord)).unique().all()
             return [self._opportunity_from_record(record) for record in records]
+
+    def get_embedding(
+        self,
+        target: EmbeddingTarget,
+        target_id: UUID,
+        model: str,
+        content_sha256: str,
+    ) -> SemanticEmbedding | None:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(SemanticEmbeddingRecord).where(
+                    SemanticEmbeddingRecord.target == target.value,
+                    SemanticEmbeddingRecord.target_id == target_id,
+                    SemanticEmbeddingRecord.model == model,
+                    SemanticEmbeddingRecord.content_sha256 == content_sha256,
+                )
+            ).first()
+            return self._embedding_from_record(record) if record else None
+
+    def save_embedding(self, embedding: SemanticEmbedding) -> SemanticEmbedding:
+        with transaction(self.session_factory) as session:
+            existing = session.scalars(
+                select(SemanticEmbeddingRecord).where(
+                    SemanticEmbeddingRecord.target == embedding.target.value,
+                    SemanticEmbeddingRecord.target_id == embedding.target_id,
+                    SemanticEmbeddingRecord.model == embedding.model,
+                )
+            ).first()
+            payload = embedding.model_dump(exclude={"vector"})
+            payload["target"] = embedding.target.value
+            payload["embedding"] = embedding.vector
+            if existing is None:
+                session.add(SemanticEmbeddingRecord(**payload))
+            else:
+                for name, value in payload.items():
+                    setattr(existing, name, value)
+        return embedding
+
+    def search_embeddings(
+        self,
+        target: EmbeddingTarget,
+        model: str,
+        query_vector: list[float],
+        limit: int,
+        organization_id: UUID | None = None,
+    ) -> list[EmbeddingHit]:
+        distance = SemanticEmbeddingRecord.embedding.cosine_distance(query_vector)
+        with transaction(self.session_factory) as session:
+            statement = select(SemanticEmbeddingRecord, distance.label("distance")).where(
+                SemanticEmbeddingRecord.target == target.value,
+                SemanticEmbeddingRecord.model == model,
+            )
+            if organization_id is None:
+                statement = statement.where(SemanticEmbeddingRecord.organization_id.is_(None))
+            else:
+                statement = statement.where(
+                    SemanticEmbeddingRecord.organization_id == organization_id
+                )
+            rows = session.execute(statement.order_by(distance).limit(limit)).all()
+            hits: list[EmbeddingHit] = []
+            for row in rows:
+                record = cast(SemanticEmbeddingRecord, row[0])
+                cosine_distance = cast(float, row[1])
+                hits.append(
+                    EmbeddingHit(
+                        target_id=record.target_id,
+                        score=max(0.0, min(1.0, 1.0 - cosine_distance)),
+                    )
+                )
+            return hits
 
     def save_review_item(self, item: ReviewItem) -> ReviewItem:
         with transaction(self.session_factory) as session:
@@ -420,4 +494,17 @@ class SqlAlchemyStore:
                 )
                 for item in record.evidence
             ],
+        )
+
+    @staticmethod
+    def _embedding_from_record(record: SemanticEmbeddingRecord) -> SemanticEmbedding:
+        return SemanticEmbedding(
+            id=record.id,
+            target=EmbeddingTarget(record.target),
+            target_id=record.target_id,
+            organization_id=record.organization_id,
+            model=record.model,
+            content_sha256=record.content_sha256,
+            vector=[float(component) for component in record.embedding],
+            created_at=_ensure_aware(record.created_at),
         )

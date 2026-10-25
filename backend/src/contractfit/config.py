@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     ai_provider: Literal["offline", "ollama"] = "offline"
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "qwen2.5:7b"
+    embedding_provider: Literal["disabled", "ollama"] = "disabled"
+    embedding_model: str = "nomic-embed-text"
+    embedding_dimensions: int = Field(default=768, ge=1, le=4096)
+    embedding_match_limit: int = Field(default=100, ge=1, le=1000)
     storage_backend: Literal["memory", "postgres"] = "memory"
     seed_demo_data: bool = True
     upload_directory: str = "data/uploads"
@@ -35,6 +39,8 @@ class Settings(BaseSettings):
             and self.auth_secret_key == "development-only-change-me-32-bytes"
         ):
             raise ValueError("production requires a private AUTH_SECRET_KEY")
+        if self.embedding_provider == "ollama" and self.embedding_dimensions != 768:
+            raise ValueError("the current pgvector schema requires 768-dimensional embeddings")
         return self
 
 

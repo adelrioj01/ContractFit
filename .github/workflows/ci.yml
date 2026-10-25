@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17-alpine
+        image: pgvector/pgvector:pg17
         env:
           POSTGRES_DB: contractfit_test
           POSTGRES_USER: contractfit
@@ -41,3 +41,7 @@ jobs:
         run: |
           uv run alembic upgrade head
           uv run alembic check
+      - name: Verify pgvector similarity search
+        env:
+          DATABASE_URL: postgresql+psycopg://contractfit:contractfit@localhost:5432/contractfit_test
+        run: uv run pytest tests/test_pgvector_store.py

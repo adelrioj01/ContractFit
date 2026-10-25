@@ -17,3 +17,8 @@ def test_production_accepts_private_auth_secret() -> None:
     )
 
     assert settings.app_env == "production"
+
+
+def test_ollama_embeddings_require_schema_dimension() -> None:
+    with pytest.raises(ValidationError, match="768-dimensional"):
+        Settings(embedding_provider="ollama", embedding_dimensions=384)
