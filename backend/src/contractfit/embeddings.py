@@ -114,6 +114,40 @@ class OllamaEmbeddingProvider:
         return vector
 
 
+class EmbeddingSimilarityScorer:
+    """Pairwise cosine scorer for labeled evaluation and small experiments."""
+
+    def __init__(self, provider: EmbeddingProvider) -> None:
+        self.provider = provider
+        self._cache: dict[str, list[float]] = {}
+
+    @property
+    def name(self) -> str:
+        return f"embedding-cosine:{self.provider.name}"
+
+    def score(self, query: str, candidate: str) -> tuple[float, str]:
+        query_vector = self._embed(query)
+        candidate_vector = self._embed(candidate)
+        dot = sum(
+            left * right
+            for left, right in zip(query_vector, candidate_vector, strict=True)
+        )
+        query_norm = math.sqrt(sum(value * value for value in query_vector))
+        candidate_norm = math.sqrt(sum(value * value for value in candidate_vector))
+        similarity = 0.0
+        if query_norm and candidate_norm:
+            similarity = max(0.0, min(1.0, dot / (query_norm * candidate_norm)))
+        return similarity, f"Embedding cosine similarity is {similarity:.0%}."
+
+    def _embed(self, text: str) -> list[float]:
+        if text not in self._cache:
+            vector = self.provider.embed(text)
+            if len(vector) != self.provider.dimensions:
+                raise ValueError("embedding provider returned an unexpected vector size")
+            self._cache[text] = vector
+        return self._cache[text]
+
+
 class EmbeddingService:
     def __init__(self, provider: EmbeddingProvider, index: EmbeddingIndex) -> None:
         self.provider = provider
