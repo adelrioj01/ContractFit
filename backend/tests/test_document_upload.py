@@ -1,5 +1,6 @@
 from io import BytesIO
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException, UploadFile
@@ -11,9 +12,34 @@ from contractfit.api import (
     list_document_pages,
     upload_document,
 )
+from contractfit.auth import (
+    AuthIdentity,
+    Organization,
+    OrganizationMembership,
+    OrganizationRole,
+    UserAccount,
+)
 from contractfit.config import get_settings
 from contractfit.job_queue import InMemoryJobQueue
 from contractfit.store import InMemoryStore
+
+
+def make_identity(name: str = "Test Facilities") -> AuthIdentity:
+    organization = Organization(name=name)
+    user = UserAccount(
+        email=f"{uuid4()}@example.com",
+        display_name=name,
+        password_hash="not-used-in-direct-api-tests",
+    )
+    return AuthIdentity(
+        user=user,
+        organization=organization,
+        membership=OrganizationMembership(
+            organization_id=organization.id,
+            user_id=user.id,
+            role=OrganizationRole.ADMIN,
+        ),
+    )
 
 
 def make_upload(filename: str, content: bytes, content_type: str) -> UploadFile:
@@ -29,6 +55,7 @@ def test_upload_extracts_page_evidence_and_deduplicates(tmp_path: Path) -> None:
     previous_directory = settings.upload_directory
     settings.upload_directory = str(tmp_path)
     configure_store(InMemoryStore())
+    identity = make_identity()
     content = b"\n".join(
         [
             b"Title: Library HVAC Maintenance",
@@ -41,7 +68,9 @@ def test_upload_extracts_page_evidence_and_deduplicates(tmp_path: Path) -> None:
     )
 
     try:
-        response = upload_document(make_upload("solicitation.txt", content, "text/plain"))
+        response = upload_document(
+            make_upload("solicitation.txt", content, "text/plain"), identity
+        )
         assert response.duplicate is False
         assert response.document.status == "ready"
         assert response.document.page_count == 1
@@ -51,10 +80,12 @@ def test_upload_extracts_page_evidence_and_deduplicates(tmp_path: Path) -> None:
         assert response.opportunity.title == "Library HVAC Maintenance"
         assert response.opportunity.requirements[0].evidence.page == 1
 
-        pages = list_document_pages(response.document.id)
+        pages = list_document_pages(response.document.id, identity)
         assert pages[0].text.startswith("Title:")
 
-        duplicate = upload_document(make_upload("solicitation.txt", content, "text/plain"))
+        duplicate = upload_document(
+            make_upload("solicitation.txt", content, "text/plain"), identity
+        )
         assert duplicate.duplicate is True
         assert duplicate.document.id == response.document.id
     finally:
@@ -66,11 +97,13 @@ def test_upload_rejects_unsupported_type(tmp_path: Path) -> None:
     previous_directory = settings.upload_directory
     settings.upload_directory = str(tmp_path)
     configure_store(InMemoryStore())
+    identity = make_identity()
 
     try:
         with pytest.raises(HTTPException) as error:
             upload_document(
-                make_upload("payload.exe", b"not allowed", "application/octet-stream")
+                make_upload("payload.exe", b"not allowed", "application/octet-stream"),
+                identity,
             )
         assert error.value.status_code == 422
     finally:
@@ -86,6 +119,7 @@ def test_redis_mode_queues_document_without_processing_request(tmp_path: Path) -
     queue = InMemoryJobQueue()
     configure_store(InMemoryStore())
     configure_processing(queue)
+    identity = make_identity()
 
     try:
         response = upload_document(
@@ -93,7 +127,8 @@ def test_redis_mode_queues_document_without_processing_request(tmp_path: Path) -
                 "notice.txt",
                 b"Title: Queued opportunity with enough source text",
                 "text/plain",
-            )
+            ),
+            identity,
         )
         assert response.document.status == "uploaded"
         assert response.opportunity is None

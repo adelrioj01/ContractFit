@@ -19,6 +19,7 @@ def test_sql_store_round_trip_preserves_evidence() -> None:
     Base.metadata.create_all(engine)
     store = SqlAlchemyStore(build_session_factory(engine))
     document = SourceDocument(
+        organization_id=SAMPLE_PROFILE.organization_id,
         filename="sample.txt",
         content=SAMPLE_SOLICITATION,
         sha256="a" * 64,
@@ -40,7 +41,10 @@ def test_sql_store_round_trip_preserves_evidence() -> None:
     assert saved_profile.name == SAMPLE_PROFILE.name
     assert saved_opportunity.title == opportunity.title
     assert saved_opportunity.requirements[0].evidence.supporting_text
-    assert store.find_document_by_sha256("a" * 64) is not None
+    assert (
+        store.find_document_by_sha256("a" * 64, SAMPLE_PROFILE.organization_id)
+        is not None
+    )
     assert store.list_document_pages(document.id)[0].page_number == 1
 
     store.reset()

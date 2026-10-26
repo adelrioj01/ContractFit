@@ -1,10 +1,14 @@
 from contractfit.domain import SourceDocument
 from contractfit.extraction import RequirementExtractor
-from contractfit.sample_data import SAMPLE_SOLICITATION
+from contractfit.sample_data import SAMPLE_PROFILE, SAMPLE_SOLICITATION
 
 
 def test_extracts_requirements_with_verbatim_evidence() -> None:
-    document = SourceDocument(filename="sample.txt", content=SAMPLE_SOLICITATION)
+    document = SourceDocument(
+        organization_id=SAMPLE_PROFILE.organization_id,
+        filename="sample.txt",
+        content=SAMPLE_SOLICITATION,
+    )
     opportunity = RequirementExtractor().extract(document, "sample-1")
     assert {item.category for item in opportunity.requirements} == {
         "deadline",

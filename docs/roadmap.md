@@ -32,7 +32,8 @@ with both plain text and image-only PDF inputs.
 - [x] Provider-independent organizations, user accounts, memberships and signed access tokens.
 - [x] Authenticated organization and reviewer identity for the human-review workflow.
 - [x] Enforce authenticated organization boundaries for company profiles and profile-based matching.
-- Extend authenticated organization boundaries to documents, jobs and opportunities.
+- [x] Enforce authenticated organization boundaries for documents, jobs and uploaded opportunities.
+- Define explicit ownership and visibility rules for the shared SAM.gov opportunity catalog.
 - Password-login rate limiting, password reset and email verification.
 - Migrations, logging, tests and CI.
 

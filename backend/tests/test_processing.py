@@ -45,6 +45,7 @@ def test_processor_extracts_document_and_is_idempotent(tmp_path: Path) -> None:
     store = InMemoryStore()
     document = store.save_document(
         SourceDocument(
+            organization_id=SAMPLE_PROFILE.organization_id,
             filename=stored.original_filename,
             content="",
             sha256=stored.sha256,
@@ -77,6 +78,7 @@ def test_processor_retries_then_marks_malformed_document_failed(tmp_path: Path) 
     store = InMemoryStore()
     document = store.save_document(
         SourceDocument(
+            organization_id=SAMPLE_PROFILE.organization_id,
             filename=stored.original_filename,
             content="",
             sha256=stored.sha256,
@@ -110,6 +112,7 @@ def test_processor_creates_review_for_low_confidence_requirement(tmp_path: Path)
     store.save_profile(SAMPLE_PROFILE.model_copy(deep=True))
     document = store.save_document(
         SourceDocument(
+            organization_id=SAMPLE_PROFILE.organization_id,
             filename=stored.original_filename,
             content="",
             sha256=stored.sha256,

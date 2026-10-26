@@ -75,7 +75,11 @@ def evaluate(cases: list[EvaluationCase], profile: CompanyProfile) -> Evaluation
     citations = 0
     correct_eligibility = 0
     for index, case in enumerate(cases):
-        document = SourceDocument(filename=f"evaluation-{index}.txt", content=case.solicitation)
+        document = SourceDocument(
+            organization_id=profile.organization_id,
+            filename=f"evaluation-{index}.txt",
+            content=case.solicitation,
+        )
         opportunity = extractor.extract(document, source_id=f"evaluation-{index}")
         extracted = {requirement.category for requirement in opportunity.requirements}
         expected = set(case.expected_categories)
@@ -91,7 +95,11 @@ def evaluate(cases: list[EvaluationCase], profile: CompanyProfile) -> Evaluation
         len(
             RequirementExtractor()
             .extract(
-                SourceDocument(filename=f"citation-{i}.txt", content=case.solicitation),
+                SourceDocument(
+                    organization_id=profile.organization_id,
+                    filename=f"citation-{i}.txt",
+                    content=case.solicitation,
+                ),
                 source_id=f"citation-{i}",
             )
             .requirements

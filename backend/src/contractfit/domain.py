@@ -43,6 +43,7 @@ class Evidence(BaseModel):
 
 class SourceDocument(BaseModel):
     id: UUID = Field(default_factory=uuid4)
+    organization_id: UUID
     filename: str
     content: str
     imported_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
