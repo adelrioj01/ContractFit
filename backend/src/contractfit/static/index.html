@@ -61,10 +61,10 @@ const authFetch=(url,options={})=>fetch(url,{...options,headers:{...(options.hea
 async function load(){
   try{
     const[p,o,m,e,jobs]=await Promise.all([
-      fetch('/api/profile').then(json),
+      authFetch('/api/profile').then(json),
       fetch('/api/opportunities').then(json),
-      fetch('/api/matches').then(json),
-      fetch('/api/evaluation').then(json),
+      authFetch('/api/matches').then(json),
+      authFetch('/api/evaluation').then(json),
       fetch('/api/processing-jobs').then(json)
     ]);
     const activeJobs=jobs.filter(job=>['queued','processing'].includes(job.status)).length;

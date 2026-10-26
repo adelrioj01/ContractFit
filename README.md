@@ -88,6 +88,8 @@ Useful API routes:
 - `POST /api/auth/register`
 - `POST /api/auth/token`
 - `GET /api/auth/me`
+- `GET /api/profile`
+- `PUT /api/profile`
 - `POST /api/documents/upload`
 - `GET /api/documents`
 - `GET /api/documents/{document_id}/pages`
@@ -100,6 +102,10 @@ Useful API routes:
 - `GET /api/evaluation`
 - `GET /api/evaluation/ranking`
 - `POST /api/demo/reset`
+
+Profile, match, evaluation, review, and demo-reset routes require a bearer token. Profile data and
+profile-based results are resolved from the organization in that token; client-supplied profile
+organization identifiers are not trusted.
 
 The seeded local reviewer account is `demo@contractfit.local` with password
 `contractfit-demo-password`. It is for local development only. Production refuses to start with

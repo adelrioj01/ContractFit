@@ -67,9 +67,14 @@ class SqlAlchemyStore:
             session.execute(delete(UserAccountRecord))
             session.execute(delete(OrganizationRecord))
 
-    def get_profile(self) -> CompanyProfile | None:
+    def get_profile(self, organization_id: UUID | None = None) -> CompanyProfile | None:
         with transaction(self.session_factory) as session:
-            record = session.scalars(select(CompanyProfileRecord).limit(1)).first()
+            statement = select(CompanyProfileRecord)
+            if organization_id is not None:
+                statement = statement.where(
+                    CompanyProfileRecord.organization_id == organization_id
+                )
+            record = session.scalars(statement.limit(1)).first()
             return self._profile_from_record(record) if record else None
 
     def save_profile(self, profile: CompanyProfile) -> CompanyProfile:

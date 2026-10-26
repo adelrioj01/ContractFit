@@ -301,16 +301,28 @@ def reset_demo(
 
 
 @router.get("/profile", response_model=CompanyProfile)
-def get_profile() -> CompanyProfile:
-    profile = _store.get_profile()
+def get_profile(
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> CompanyProfile:
+    profile = _store.get_profile(identity.organization.id)
     if profile is None:
         raise HTTPException(status_code=404, detail="No contractor profile configured")
     return profile
 
 
 @router.put("/profile", response_model=CompanyProfile)
-def put_profile(profile: CompanyProfile) -> CompanyProfile:
-    return _store.save_profile(profile)
+def put_profile(
+    profile: CompanyProfile,
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> CompanyProfile:
+    existing = _store.get_profile(identity.organization.id)
+    scoped_profile = profile.model_copy(
+        update={
+            "id": existing.id if existing is not None else uuid4(),
+            "organization_id": identity.organization.id,
+        }
+    )
+    return _store.save_profile(scoped_profile)
 
 
 @router.post("/opportunities/import-text", response_model=Opportunity, status_code=201)
@@ -531,8 +543,10 @@ def dismiss_review(
 
 
 @router.get("/matches", response_model=list[MatchResult])
-def list_matches() -> list[MatchResult]:
-    profile = _store.get_profile()
+def list_matches(
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> list[MatchResult]:
+    profile = _store.get_profile(identity.organization.id)
     if profile is None:
         raise HTTPException(status_code=409, detail="Create a contractor profile first")
     matcher = _matcher()
@@ -572,8 +586,10 @@ def list_matches() -> list[MatchResult]:
 
 
 @router.get("/evaluation", response_model=EvaluationReport)
-def get_evaluation() -> EvaluationReport:
-    profile = _store.get_profile()
+def get_evaluation(
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> EvaluationReport:
+    profile = _store.get_profile(identity.organization.id)
     if profile is None:
         raise HTTPException(status_code=409, detail="Create a contractor profile first")
     cases = [EvaluationCase.model_validate(item) for item in EVALUATION_CASES]

@@ -31,7 +31,8 @@ with both plain text and image-only PDF inputs.
 - API, PostgreSQL, Redis and Docker Compose.
 - [x] Provider-independent organizations, user accounts, memberships and signed access tokens.
 - [x] Authenticated organization and reviewer identity for the human-review workflow.
-- Extend authenticated organization boundaries to profiles, documents, jobs and opportunities.
+- [x] Enforce authenticated organization boundaries for company profiles and profile-based matching.
+- Extend authenticated organization boundaries to documents, jobs and opportunities.
 - Password-login rate limiting, password reset and email verification.
 - Migrations, logging, tests and CI.
 
