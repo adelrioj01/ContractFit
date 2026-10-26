@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 
 from contractfit.database import Base, build_session_factory
-from contractfit.domain import Evidence, SourceDocument
+from contractfit.domain import Evidence, Opportunity, SourceDocument
 from contractfit.review import ReviewItem, ReviewReason, ReviewStatus
 from contractfit.sql_store import SqlAlchemyStore
 from contractfit.store import ContractFitStore, InMemoryStore
@@ -77,3 +77,56 @@ def test_review_store_persists_resolution_and_filters_status(
 
     assert store.list_review_items(organization_id, ReviewStatus.PENDING) == []
     assert store.list_review_items(organization_id, ReviewStatus.RESOLVED) == [resolved]
+
+
+def test_review_store_rejects_foreign_references_and_accepts_public_opportunities(
+    store: ContractFitStore,
+) -> None:
+    first_organization_id = uuid4()
+    second_organization_id = uuid4()
+    first_document = store.save_document(
+        SourceDocument(
+            organization_id=first_organization_id,
+            filename="first.txt",
+            content="first evidence",
+        )
+    )
+    second_document = store.save_document(
+        SourceDocument(
+            organization_id=second_organization_id,
+            filename="second.txt",
+            content="second evidence",
+        )
+    )
+    private_opportunity = store.save_opportunity(
+        Opportunity(
+            source="upload",
+            source_id=f"private-{uuid4()}",
+            title="Second organization opportunity",
+            document_id=second_document.id,
+        )
+    )
+    public_opportunity = store.save_opportunity(
+        Opportunity(
+            source="sam.gov",
+            source_id=f"public-{uuid4()}",
+            title="Shared SAM opportunity",
+        )
+    )
+
+    with pytest.raises(ValueError, match="opportunity is not visible"):
+        store.save_review_item(
+            make_review(first_organization_id, first_document.id).model_copy(
+                update={"opportunity_id": private_opportunity.id}
+            )
+        )
+
+    with pytest.raises(ValueError, match="evidence document is not owned"):
+        store.save_review_item(make_review(first_organization_id, second_document.id))
+
+    saved = store.save_review_item(
+        make_review(first_organization_id, first_document.id).model_copy(
+            update={"opportunity_id": public_opportunity.id}
+        )
+    )
+    assert saved.opportunity_id == public_opportunity.id

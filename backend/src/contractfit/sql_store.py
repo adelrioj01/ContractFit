@@ -216,6 +216,25 @@ class SqlAlchemyStore:
             session.add(record)
         return opportunity
 
+    def get_opportunity(
+        self, opportunity_id: UUID, organization_id: UUID | None = None
+    ) -> Opportunity | None:
+        with transaction(self.session_factory) as session:
+            statement = (
+                select(OpportunityRecord)
+                .outerjoin(SourceDocumentRecord)
+                .where(OpportunityRecord.id == opportunity_id)
+            )
+            if organization_id is not None:
+                statement = statement.where(
+                    or_(
+                        OpportunityRecord.document_id.is_(None),
+                        SourceDocumentRecord.organization_id == organization_id,
+                    )
+                )
+            record = session.scalars(statement).unique().first()
+            return self._opportunity_from_record(record) if record else None
+
     def list_opportunities(
         self, organization_id: UUID | None = None
     ) -> list[Opportunity]:
@@ -303,6 +322,37 @@ class SqlAlchemyStore:
 
     def save_review_item(self, item: ReviewItem) -> ReviewItem:
         with transaction(self.session_factory) as session:
+            if item.opportunity_id is not None:
+                visible_opportunity = session.scalars(
+                    select(OpportunityRecord)
+                    .outerjoin(SourceDocumentRecord)
+                    .where(
+                        OpportunityRecord.id == item.opportunity_id,
+                        or_(
+                            OpportunityRecord.document_id.is_(None),
+                            SourceDocumentRecord.organization_id == item.organization_id,
+                        ),
+                    )
+                ).first()
+                if visible_opportunity is None:
+                    raise ValueError(
+                        "review opportunity is not visible to the organization"
+                    )
+
+            evidence_document_ids = {evidence.document_id for evidence in item.evidence}
+            owned_document_ids = set(
+                session.scalars(
+                    select(SourceDocumentRecord.id).where(
+                        SourceDocumentRecord.id.in_(evidence_document_ids),
+                        SourceDocumentRecord.organization_id == item.organization_id,
+                    )
+                ).all()
+            )
+            if owned_document_ids != evidence_document_ids:
+                raise ValueError(
+                    "review evidence document is not owned by the organization"
+                )
+
             existing = session.get(ReviewItemRecord, item.id)
             if existing:
                 session.delete(existing)
