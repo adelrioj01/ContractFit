@@ -33,7 +33,8 @@ with both plain text and image-only PDF inputs.
 - [x] Authenticated organization and reviewer identity for the human-review workflow.
 - [x] Enforce authenticated organization boundaries for company profiles and profile-based matching.
 - [x] Enforce authenticated organization boundaries for documents, jobs and uploaded opportunities.
-- Define explicit ownership and visibility rules for the shared SAM.gov opportunity catalog.
+- [x] Define explicit ownership and visibility rules for the shared SAM.gov opportunity catalog.
+- [x] Reject cross-organization opportunity and evidence references in human-review creation.
 - Password-login rate limiting, password reset and email verification.
 - Migrations, logging, tests and CI.
 

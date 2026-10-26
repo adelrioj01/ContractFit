@@ -40,6 +40,9 @@ class ContractFitStore(Protocol):
         document_id: UUID | None = None,
     ) -> list[ProcessingJob]: ...
     def save_opportunity(self, opportunity: Opportunity) -> Opportunity: ...
+    def get_opportunity(
+        self, opportunity_id: UUID, organization_id: UUID | None = None
+    ) -> Opportunity | None: ...
     def list_opportunities(
         self, organization_id: UUID | None = None
     ) -> list[Opportunity]: ...
@@ -187,6 +190,18 @@ class InMemoryStore:
         self.opportunities[opportunity.id] = opportunity
         return opportunity
 
+    def get_opportunity(
+        self, opportunity_id: UUID, organization_id: UUID | None = None
+    ) -> Opportunity | None:
+        opportunity = self.opportunities.get(opportunity_id)
+        if opportunity is None or organization_id is None:
+            return opportunity
+        if opportunity.document_id is None:
+            return opportunity
+        if self.get_document(opportunity.document_id, organization_id) is None:
+            return None
+        return opportunity
+
     def list_opportunities(
         self, organization_id: UUID | None = None
     ) -> list[Opportunity]:
@@ -243,6 +258,16 @@ class InMemoryStore:
         return sorted(hits, key=lambda item: item.score, reverse=True)[:limit]
 
     def save_review_item(self, item: ReviewItem) -> ReviewItem:
+        if (
+            item.opportunity_id is not None
+            and self.get_opportunity(item.opportunity_id, item.organization_id) is None
+        ):
+            raise ValueError("review opportunity is not visible to the organization")
+        if any(
+            self.get_document(evidence.document_id, item.organization_id) is None
+            for evidence in item.evidence
+        ):
+            raise ValueError("review evidence document is not owned by the organization")
         self.review_items[item.id] = item
         return item
 

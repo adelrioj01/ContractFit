@@ -105,8 +105,9 @@ Useful API routes:
 
 Customer routes require a bearer token. Profiles, uploaded documents, document pages, processing
 jobs, uploaded opportunities, matches, evaluations, and reviews are resolved from the organization
-in that token; client-supplied ownership identifiers are not trusted. Future public SAM.gov catalog
-records can remain shared because they have no customer document owner.
+in that token; client-supplied ownership identifiers are not trusted. Public SAM.gov catalog records
+have no customer document owner and remain shared. Opportunities linked to an uploaded document are
+private, and review evidence may reference only documents owned by the authenticated organization.
 
 The seeded local reviewer account is `demo@contractfit.local` with password
 `contractfit-demo-password`. It is for local development only. Production refuses to start with

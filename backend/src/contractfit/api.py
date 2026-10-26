@@ -526,11 +526,20 @@ def create_review(
     request: CreateReviewRequest,
     identity: Annotated[AuthIdentity, Depends(get_current_identity)],
 ) -> ReviewItem:
-    return _store.save_review_item(
-        ReviewItem.model_validate(
-            {**request.model_dump(), "organization_id": identity.organization.id}
-        )
+    organization_id = identity.organization.id
+    if request.opportunity_id is not None and _store.get_opportunity(
+        request.opportunity_id, organization_id
+    ) is None:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+    if any(
+        _store.get_document(evidence.document_id, organization_id) is None
+        for evidence in request.evidence
+    ):
+        raise HTTPException(status_code=404, detail="Evidence document not found")
+    item = ReviewItem.model_validate(
+        {**request.model_dump(), "organization_id": organization_id}
     )
+    return _store.save_review_item(item)
 
 
 @router.get("/reviews", response_model=list[ReviewItem])
