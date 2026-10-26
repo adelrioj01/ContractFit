@@ -9,9 +9,9 @@
 - [x] Ranked opportunity dashboard and JSON API.
 - [x] Three-case labeled evaluation harness and CI coverage.
 
-The current hardening target is authenticated organization boundaries plus a scheduled SAM.gov
-ingestion workflow. Persistence, manual document ingestion, background processing, OCR, and the
-human-review queue are implemented end to end. The ingestion path has passed a Docker smoke test
+The current hardening target is production-ready catalog and document ingestion. Persistence,
+scheduled SAM.gov synchronization, manual document ingestion, background processing, OCR, and the
+human-review queue are implemented end to end. The document path has passed a Docker smoke test
 with both plain text and image-only PDF inputs.
 
 ## Implemented persistence foundation
@@ -46,9 +46,10 @@ with both plain text and image-only PDF inputs.
 ## Phase 3: ingestion
 - [x] Manual PDF, DOCX and TXT opportunity upload.
 - [x] Testable SAM.gov search client with normalized records, pagination and sanitized errors.
-- Persisted SAM.gov import workflow with scheduling, deduplication and amendment detection.
+- [x] Persisted SAM.gov import workflow with scheduling, deduplication and amendment detection.
 - [x] Secure attachment storage, SHA-256 hashing and deduplication.
-- Amendment snapshots and version history.
+- [x] Normalized amendment snapshots and version history.
+- Fetch and version SAM.gov solicitation attachments.
 - [x] Durable, retryable Redis-backed background processing.
 
 ## Phase 4: document intelligence

@@ -75,6 +75,7 @@ This repository now contains a working vertical-slice MVP:
 - PDF, DOCX and TXT solicitation upload with secure hash-addressed storage and deduplication
 - Page-oriented parsing with evidence-preserving requirement extraction and OCR flags
 - Durable Redis-backed processing jobs with retries and a separate worker
+- Scheduled SAM.gov catalog synchronization with pagination, deduplication and amendment snapshots
 - Local Tesseract OCR for scanned PDF pages
 - Deterministic deadline, territory, set-aside, certification, and capacity gates
 - Hybrid fit scoring with an optional local Ollama model and an offline fallback
@@ -148,6 +149,26 @@ is only considered a measured model result when that command completes successfu
 
 Docker Compose runs document parsing, OCR and extraction in the `worker` service. Direct backend
 development defaults to `PROCESSING_MODE=inline`, keeping tests and one-process demos simple.
+
+## SAM.gov synchronization
+
+Create a SAM.gov API key, set `SAM_API_KEY` in `.env`, and apply the database migrations. Run a
+single bounded import with:
+
+```bash
+docker compose run --rm sam-ingester python -m contractfit.sam_worker --once
+```
+
+For continuous synchronization, set `SAM_SYNC_ENABLED=true` and start the optional service:
+
+```bash
+docker compose --profile sam up -d sam-ingester
+```
+
+The default schedule checks the last seven days every six hours. `SAM_LOOKBACK_DAYS`,
+`SAM_SYNC_INTERVAL_MINUTES`, `SAM_PAGE_SIZE`, and `SAM_REQUEST_TIMEOUT_SECONDS` are configurable.
+Each run is audited in PostgreSQL. New and amended records create immutable normalized snapshots;
+unchanged records are not duplicated. API keys are never stored in run errors or snapshots.
 
 ## Persistence
 

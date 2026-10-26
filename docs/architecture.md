@@ -18,9 +18,11 @@ Durable `ProcessingJob` records and a Redis queue move parsing, OCR and extracti
 process; a separate worker retries failures and recovers unfinished jobs after restart.
 
 The external-ingestion boundary includes a typed SAM.gov client that normalizes the provider's
-payload before it reaches product logic. The human-review boundary models field-level decisions
-with organization ownership, source evidence, deterministic priority and auditable terminal
-transitions. Their persistence and HTTP workflows are the next integration step.
+payload before it reaches product logic. A separate scheduler persists bounded ingestion runs,
+paginates the source, deduplicates opportunities by provider identity, and records immutable
+content-hashed snapshots only when provider data changes. Failed runs retain sanitized audit data
+and can be retried safely. The human-review boundary models field-level decisions with organization
+ownership, source evidence, deterministic priority and auditable terminal transitions.
 
 ## Persistence boundary
 
@@ -29,7 +31,8 @@ experiments fast; `SqlAlchemyStore` is the production adapter. SQLAlchemy record
 separate from Pydantic domain models so database concerns cannot leak into extraction or matching.
 Alembic is the only supported mechanism for changing the PostgreSQL schema.
 
-ContractFit begins as a modular monolith. It can later split ingestion and document processing into independent workers without changing the domain contracts.
+ContractFit begins as a modular monolith. SAM ingestion and document processing already execute as
+independent processes over shared persistence without changing the domain contracts.
 
 ## Data flow
 
