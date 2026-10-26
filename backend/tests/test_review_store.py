@@ -44,7 +44,13 @@ def store(request: pytest.FixtureRequest) -> ContractFitStore:
 
 def test_review_store_round_trip_and_organization_isolation(store: ContractFitStore) -> None:
     organization_id = uuid4()
-    document = store.save_document(SourceDocument(filename="notice.txt", content="source"))
+    document = store.save_document(
+        SourceDocument(
+            organization_id=organization_id,
+            filename="notice.txt",
+            content="source",
+        )
+    )
     item = store.save_review_item(make_review(organization_id, document.id))
 
     assert store.get_review_item(item.id, organization_id) == item
@@ -57,7 +63,13 @@ def test_review_store_persists_resolution_and_filters_status(
     store: ContractFitStore,
 ) -> None:
     organization_id = uuid4()
-    document = store.save_document(SourceDocument(filename="notice.txt", content="source"))
+    document = store.save_document(
+        SourceDocument(
+            organization_id=organization_id,
+            filename="notice.txt",
+            content="source",
+        )
+    )
     pending = store.save_review_item(make_review(organization_id, document.id))
     resolved = store.save_review_item(
         pending.resolve(reviewer_id=uuid4(), corrected_value="2026-12-01")

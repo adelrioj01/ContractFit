@@ -23,7 +23,7 @@ def test_demo_vertical_slice() -> None:
     identity = store.get_identity_by_email(DEMO_EMAIL)
     assert identity is not None
     assert reset_demo(identity)["opportunities"] == 1
-    opportunities = list_opportunities()
+    opportunities = list_opportunities(identity)
     matches = list_matches(identity)
     evaluation = get_evaluation(identity)
 

@@ -6,7 +6,12 @@ from contractfit.sample_data import SAMPLE_PROFILE, SAMPLE_SOLICITATION
 
 def test_matching_applies_hard_gates_and_explains_score() -> None:
     opportunity = RequirementExtractor().extract(
-        SourceDocument(filename="sample.txt", content=SAMPLE_SOLICITATION), "sample-1"
+        SourceDocument(
+            organization_id=SAMPLE_PROFILE.organization_id,
+            filename="sample.txt",
+            content=SAMPLE_SOLICITATION,
+        ),
+        "sample-1",
     )
     result = OpportunityMatcher().match(SAMPLE_PROFILE, opportunity)
     assert result.eligibility == EligibilityStatus.ELIGIBLE
@@ -17,7 +22,12 @@ def test_matching_applies_hard_gates_and_explains_score() -> None:
 
 def test_matching_accepts_embedding_similarity_without_bypassing_hard_gates() -> None:
     opportunity = RequirementExtractor().extract(
-        SourceDocument(filename="sample.txt", content=SAMPLE_SOLICITATION), "embedding-1"
+        SourceDocument(
+            organization_id=SAMPLE_PROFILE.organization_id,
+            filename="sample.txt",
+            content=SAMPLE_SOLICITATION,
+        ),
+        "embedding-1",
     )
     result = OpportunityMatcher().match(
         SAMPLE_PROFILE,

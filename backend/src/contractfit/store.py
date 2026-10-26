@@ -19,16 +19,30 @@ class ContractFitStore(Protocol):
     def get_profile(self, organization_id: UUID | None = None) -> CompanyProfile | None: ...
     def save_profile(self, profile: CompanyProfile) -> CompanyProfile: ...
     def save_document(self, document: SourceDocument) -> SourceDocument: ...
-    def get_document(self, document_id: UUID) -> SourceDocument | None: ...
-    def find_document_by_sha256(self, sha256: str) -> SourceDocument | None: ...
-    def list_documents(self) -> list[SourceDocument]: ...
+    def get_document(
+        self, document_id: UUID, organization_id: UUID | None = None
+    ) -> SourceDocument | None: ...
+    def find_document_by_sha256(
+        self, sha256: str, organization_id: UUID
+    ) -> SourceDocument | None: ...
+    def list_documents(self, organization_id: UUID) -> list[SourceDocument]: ...
     def save_document_pages(self, pages: list[DocumentPage]) -> list[DocumentPage]: ...
-    def list_document_pages(self, document_id: UUID) -> list[DocumentPage]: ...
+    def list_document_pages(
+        self, document_id: UUID, organization_id: UUID | None = None
+    ) -> list[DocumentPage]: ...
     def save_processing_job(self, job: ProcessingJob) -> ProcessingJob: ...
-    def get_processing_job(self, job_id: UUID) -> ProcessingJob | None: ...
-    def list_processing_jobs(self, document_id: UUID | None = None) -> list[ProcessingJob]: ...
+    def get_processing_job(
+        self, job_id: UUID, organization_id: UUID | None = None
+    ) -> ProcessingJob | None: ...
+    def list_processing_jobs(
+        self,
+        organization_id: UUID | None = None,
+        document_id: UUID | None = None,
+    ) -> list[ProcessingJob]: ...
     def save_opportunity(self, opportunity: Opportunity) -> Opportunity: ...
-    def list_opportunities(self) -> list[Opportunity]: ...
+    def list_opportunities(
+        self, organization_id: UUID | None = None
+    ) -> list[Opportunity]: ...
     def get_embedding(
         self,
         target: EmbeddingTarget,
@@ -98,32 +112,73 @@ class InMemoryStore:
         self.documents[document.id] = document
         return document
 
-    def get_document(self, document_id: UUID) -> SourceDocument | None:
-        return self.documents.get(document_id)
+    def get_document(
+        self, document_id: UUID, organization_id: UUID | None = None
+    ) -> SourceDocument | None:
+        document = self.documents.get(document_id)
+        if (
+            document is not None
+            and organization_id is not None
+            and document.organization_id != organization_id
+        ):
+            return None
+        return document
 
-    def find_document_by_sha256(self, sha256: str) -> SourceDocument | None:
-        return next((item for item in self.documents.values() if item.sha256 == sha256), None)
+    def find_document_by_sha256(
+        self, sha256: str, organization_id: UUID
+    ) -> SourceDocument | None:
+        return next(
+            (
+                item
+                for item in self.documents.values()
+                if item.sha256 == sha256 and item.organization_id == organization_id
+            ),
+            None,
+        )
 
-    def list_documents(self) -> list[SourceDocument]:
-        return list(self.documents.values())
+    def list_documents(self, organization_id: UUID) -> list[SourceDocument]:
+        return [
+            item
+            for item in self.documents.values()
+            if item.organization_id == organization_id
+        ]
 
     def save_document_pages(self, pages: list[DocumentPage]) -> list[DocumentPage]:
         if pages:
             self.document_pages[pages[0].document_id] = pages
         return pages
 
-    def list_document_pages(self, document_id: UUID) -> list[DocumentPage]:
+    def list_document_pages(
+        self, document_id: UUID, organization_id: UUID | None = None
+    ) -> list[DocumentPage]:
+        if self.get_document(document_id, organization_id) is None:
+            return []
         return self.document_pages.get(document_id, [])
 
     def save_processing_job(self, job: ProcessingJob) -> ProcessingJob:
         self.processing_jobs[job.id] = job
         return job
 
-    def get_processing_job(self, job_id: UUID) -> ProcessingJob | None:
-        return self.processing_jobs.get(job_id)
+    def get_processing_job(
+        self, job_id: UUID, organization_id: UUID | None = None
+    ) -> ProcessingJob | None:
+        job = self.processing_jobs.get(job_id)
+        if job is None or self.get_document(job.document_id, organization_id) is None:
+            return None
+        return job
 
-    def list_processing_jobs(self, document_id: UUID | None = None) -> list[ProcessingJob]:
+    def list_processing_jobs(
+        self,
+        organization_id: UUID | None = None,
+        document_id: UUID | None = None,
+    ) -> list[ProcessingJob]:
         jobs = list(self.processing_jobs.values())
+        if organization_id is not None:
+            jobs = [
+                job
+                for job in jobs
+                if self.get_document(job.document_id, organization_id) is not None
+            ]
         if document_id is not None:
             jobs = [job for job in jobs if job.document_id == document_id]
         return jobs
@@ -132,8 +187,18 @@ class InMemoryStore:
         self.opportunities[opportunity.id] = opportunity
         return opportunity
 
-    def list_opportunities(self) -> list[Opportunity]:
-        return list(self.opportunities.values())
+    def list_opportunities(
+        self, organization_id: UUID | None = None
+    ) -> list[Opportunity]:
+        opportunities = list(self.opportunities.values())
+        if organization_id is None:
+            return opportunities
+        return [
+            item
+            for item in opportunities
+            if item.document_id is None
+            or self.get_document(item.document_id, organization_id) is not None
+        ]
 
     def get_embedding(
         self,

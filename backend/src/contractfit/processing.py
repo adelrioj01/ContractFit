@@ -104,12 +104,15 @@ class DocumentProcessor:
             self.store.save_document_pages(pages)
 
             if has_text:
-                source_id = f"UPLOAD-{(document.sha256 or str(document.id))[:12].upper()}"
+                source_id = (
+                    f"UPLOAD-{str(document.organization_id)[:8].upper()}-"
+                    f"{(document.sha256 or str(document.id))[:12].upper()}"
+                )
                 opportunity = self.extractor.extract(document, source_id=source_id, pages=pages)
                 existing = next(
                     (
                         item
-                        for item in self.store.list_opportunities()
+                        for item in self.store.list_opportunities(document.organization_id)
                         if item.document_id == document.id
                     ),
                     None,
@@ -117,7 +120,7 @@ class DocumentProcessor:
                 if existing is not None:
                     opportunity.id = existing.id
                 self.store.save_opportunity(opportunity)
-                profile = self.store.get_profile()
+                profile = self.store.get_profile(document.organization_id)
                 if profile is not None:
                     existing_fields = {
                         item.field_name

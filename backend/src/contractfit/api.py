@@ -201,7 +201,11 @@ def seed_demo() -> None:
     seed_demo_identity()
     _store.save_profile(SAMPLE_PROFILE.model_copy(deep=True))
     document = _store.save_document(
-        SourceDocument(filename="sample-hvac-solicitation.txt", content=SAMPLE_SOLICITATION)
+        SourceDocument(
+            organization_id=SAMPLE_PROFILE.organization_id,
+            filename="sample-hvac-solicitation.txt",
+            content=SAMPLE_SOLICITATION,
+        )
     )
     _store.save_opportunity(extractor.extract(document, source_id="DEMO-HVAC-001"))
 
@@ -297,7 +301,10 @@ def reset_demo(
     if identity.membership.role is not OrganizationRole.ADMIN:
         raise HTTPException(status_code=403, detail="Administrator role required")
     seed_demo()
-    return {"profiles": 1, "opportunities": len(_store.list_opportunities())}
+    return {
+        "profiles": 1,
+        "opportunities": len(_store.list_opportunities(identity.organization.id)),
+    }
 
 
 @router.get("/profile", response_model=CompanyProfile)
@@ -326,11 +333,21 @@ def put_profile(
 
 
 @router.post("/opportunities/import-text", response_model=Opportunity, status_code=201)
-def import_text(request: ImportTextRequest) -> Opportunity:
+def import_text(
+    request: ImportTextRequest,
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> Opportunity:
     document = _store.save_document(
-        SourceDocument(filename=request.filename, content=request.content)
+        SourceDocument(
+            organization_id=identity.organization.id,
+            filename=request.filename,
+            content=request.content,
+        )
     )
-    opportunity = extractor.extract(document, source_id=request.source_id)
+    opportunity = extractor.extract(
+        document,
+        source_id=f"{identity.organization.id}:{request.source_id}",
+    )
     return _store.save_opportunity(opportunity)
 
 
@@ -339,7 +356,10 @@ def import_text(request: ImportTextRequest) -> Opportunity:
     response_model=DocumentUploadResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def upload_document(file: Annotated[UploadFile, File()]) -> DocumentUploadResponse:
+def upload_document(
+    file: Annotated[UploadFile, File()],
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> DocumentUploadResponse:
     settings = get_settings()
     filename = file.filename or ""
     content_type = (file.content_type or "").partition(";")[0].strip().lower()
@@ -358,16 +378,22 @@ def upload_document(file: Annotated[UploadFile, File()]) -> DocumentUploadRespon
     except FileStorageError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    existing = _store.find_document_by_sha256(stored.sha256)
+    organization_id = identity.organization.id
+    existing = _store.find_document_by_sha256(stored.sha256, organization_id)
     if existing is not None:
         job = next(
-            iter(_store.list_processing_jobs(document_id=existing.id)),
+            iter(
+                _store.list_processing_jobs(
+                    organization_id,
+                    document_id=existing.id,
+                )
+            ),
             None,
         )
         opportunity = next(
             (
                 item
-                for item in _store.list_opportunities()
+                for item in _store.list_opportunities(organization_id)
                 if item.document_id == existing.id
             ),
             None,
@@ -378,6 +404,7 @@ def upload_document(file: Annotated[UploadFile, File()]) -> DocumentUploadRespon
 
     document = _store.save_document(
         SourceDocument(
+            organization_id=organization_id,
             filename=stored.original_filename,
             content="",
             sha256=stored.sha256,
@@ -398,11 +425,11 @@ def upload_document(file: Annotated[UploadFile, File()]) -> DocumentUploadRespon
     opportunity = None
     if settings.processing_mode == "inline":
         job = _processor().process(job.id)
-        document = _store.get_document(document.id) or document
+        document = _store.get_document(document.id, organization_id) or document
         opportunity = next(
             (
                 item
-                for item in _store.list_opportunities()
+                for item in _store.list_opportunities(organization_id)
                 if item.document_id == document.id
             ),
             None,
@@ -411,41 +438,59 @@ def upload_document(file: Annotated[UploadFile, File()]) -> DocumentUploadRespon
         _job_queue.enqueue(job.id)
     return DocumentUploadResponse(
         document=document,
-        duplicate=stored.duplicate,
+        duplicate=False,
         job=job,
         opportunity=opportunity,
     )
 
 
 @router.get("/documents", response_model=list[SourceDocument])
-def list_documents() -> list[SourceDocument]:
-    return _store.list_documents()
+def list_documents(
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> list[SourceDocument]:
+    return _store.list_documents(identity.organization.id)
 
 
 @router.get("/documents/{document_id}/pages", response_model=list[DocumentPage])
-def list_document_pages(document_id: UUID) -> list[DocumentPage]:
-    document = _store.get_document(document_id)
+def list_document_pages(
+    document_id: UUID,
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> list[DocumentPage]:
+    organization_id = identity.organization.id
+    document = _store.get_document(document_id, organization_id)
     if document is None:
         raise HTTPException(status_code=404, detail="Document not found")
-    return _store.list_document_pages(document_id)
+    return _store.list_document_pages(document_id, organization_id)
 
 
 @router.get("/processing-jobs", response_model=list[ProcessingJob])
-def list_processing_jobs(document_id: UUID | None = None) -> list[ProcessingJob]:
-    return _store.list_processing_jobs(document_id=document_id)
+def list_processing_jobs(
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+    document_id: UUID | None = None,
+) -> list[ProcessingJob]:
+    return _store.list_processing_jobs(
+        identity.organization.id,
+        document_id=document_id,
+    )
 
 
 @router.get("/processing-jobs/{job_id}", response_model=ProcessingJob)
-def get_processing_job(job_id: UUID) -> ProcessingJob:
-    job = _store.get_processing_job(job_id)
+def get_processing_job(
+    job_id: UUID,
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> ProcessingJob:
+    job = _store.get_processing_job(job_id, identity.organization.id)
     if job is None:
         raise HTTPException(status_code=404, detail="Processing job not found")
     return job
 
 
 @router.post("/processing-jobs/{job_id}/retry", response_model=ProcessingJob)
-def retry_processing_job(job_id: UUID) -> ProcessingJob:
-    job = get_processing_job(job_id)
+def retry_processing_job(
+    job_id: UUID,
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> ProcessingJob:
+    job = get_processing_job(job_id, identity)
     if job.status not in {
         ProcessingJobStatus.FAILED,
         ProcessingJobStatus.NEEDS_REVIEW,
@@ -470,8 +515,10 @@ def retry_processing_job(job_id: UUID) -> ProcessingJob:
 
 
 @router.get("/opportunities", response_model=list[Opportunity])
-def list_opportunities() -> list[Opportunity]:
-    return _store.list_opportunities()
+def list_opportunities(
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> list[Opportunity]:
+    return _store.list_opportunities(identity.organization.id)
 
 
 @router.post("/reviews", response_model=ReviewItem, status_code=status.HTTP_201_CREATED)
@@ -550,7 +597,7 @@ def list_matches(
     if profile is None:
         raise HTTPException(status_code=409, detail="Create a contractor profile first")
     matcher = _matcher()
-    opportunities = _store.list_opportunities()
+    opportunities = _store.list_opportunities(identity.organization.id)
     settings = get_settings()
     embedding_scores: dict[UUID, float] = {}
     if settings.embedding_provider == "ollama":

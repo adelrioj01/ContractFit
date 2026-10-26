@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from typing import cast
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -89,21 +89,39 @@ class SqlAlchemyStore:
             session.merge(SourceDocumentRecord(**payload))
         return document
 
-    def get_document(self, document_id: UUID) -> SourceDocument | None:
+    def get_document(
+        self, document_id: UUID, organization_id: UUID | None = None
+    ) -> SourceDocument | None:
         with transaction(self.session_factory) as session:
-            record = session.get(SourceDocumentRecord, document_id)
+            statement = select(SourceDocumentRecord).where(
+                SourceDocumentRecord.id == document_id
+            )
+            if organization_id is not None:
+                statement = statement.where(
+                    SourceDocumentRecord.organization_id == organization_id
+                )
+            record = session.scalars(statement).first()
             return self._document_from_record(record) if record else None
 
-    def find_document_by_sha256(self, sha256: str) -> SourceDocument | None:
+    def find_document_by_sha256(
+        self, sha256: str, organization_id: UUID
+    ) -> SourceDocument | None:
         with transaction(self.session_factory) as session:
             record = session.scalars(
-                select(SourceDocumentRecord).where(SourceDocumentRecord.sha256 == sha256)
+                select(SourceDocumentRecord).where(
+                    SourceDocumentRecord.sha256 == sha256,
+                    SourceDocumentRecord.organization_id == organization_id,
+                )
             ).first()
             return self._document_from_record(record) if record else None
 
-    def list_documents(self) -> list[SourceDocument]:
+    def list_documents(self, organization_id: UUID) -> list[SourceDocument]:
         with transaction(self.session_factory) as session:
-            records = session.scalars(select(SourceDocumentRecord)).all()
+            records = session.scalars(
+                select(SourceDocumentRecord).where(
+                    SourceDocumentRecord.organization_id == organization_id
+                )
+            ).all()
             return [self._document_from_record(record) for record in records]
 
     def save_document_pages(self, pages: list[DocumentPage]) -> list[DocumentPage]:
@@ -117,13 +135,21 @@ class SqlAlchemyStore:
             session.add_all([DocumentPageRecord(**page.model_dump()) for page in pages])
         return pages
 
-    def list_document_pages(self, document_id: UUID) -> list[DocumentPage]:
+    def list_document_pages(
+        self, document_id: UUID, organization_id: UUID | None = None
+    ) -> list[DocumentPage]:
         with transaction(self.session_factory) as session:
-            records = session.scalars(
+            statement = (
                 select(DocumentPageRecord)
+                .join(SourceDocumentRecord)
                 .where(DocumentPageRecord.document_id == document_id)
                 .order_by(DocumentPageRecord.page_number)
-            ).all()
+            )
+            if organization_id is not None:
+                statement = statement.where(
+                    SourceDocumentRecord.organization_id == organization_id
+                )
+            records = session.scalars(statement).all()
             return [
                 DocumentPage(
                     id=record.id,
@@ -143,14 +169,33 @@ class SqlAlchemyStore:
             session.merge(ProcessingJobRecord(**payload))
         return job
 
-    def get_processing_job(self, job_id: UUID) -> ProcessingJob | None:
+    def get_processing_job(
+        self, job_id: UUID, organization_id: UUID | None = None
+    ) -> ProcessingJob | None:
         with transaction(self.session_factory) as session:
-            record = session.get(ProcessingJobRecord, job_id)
+            statement = (
+                select(ProcessingJobRecord)
+                .join(SourceDocumentRecord)
+                .where(ProcessingJobRecord.id == job_id)
+            )
+            if organization_id is not None:
+                statement = statement.where(
+                    SourceDocumentRecord.organization_id == organization_id
+                )
+            record = session.scalars(statement).first()
             return self._processing_job_from_record(record) if record else None
 
-    def list_processing_jobs(self, document_id: UUID | None = None) -> list[ProcessingJob]:
+    def list_processing_jobs(
+        self,
+        organization_id: UUID | None = None,
+        document_id: UUID | None = None,
+    ) -> list[ProcessingJob]:
         with transaction(self.session_factory) as session:
-            statement = select(ProcessingJobRecord)
+            statement = select(ProcessingJobRecord).join(SourceDocumentRecord)
+            if organization_id is not None:
+                statement = statement.where(
+                    SourceDocumentRecord.organization_id == organization_id
+                )
             if document_id is not None:
                 statement = statement.where(ProcessingJobRecord.document_id == document_id)
             records = session.scalars(statement.order_by(ProcessingJobRecord.created_at)).all()
@@ -171,9 +216,19 @@ class SqlAlchemyStore:
             session.add(record)
         return opportunity
 
-    def list_opportunities(self) -> list[Opportunity]:
+    def list_opportunities(
+        self, organization_id: UUID | None = None
+    ) -> list[Opportunity]:
         with transaction(self.session_factory) as session:
-            records = session.scalars(select(OpportunityRecord)).unique().all()
+            statement = select(OpportunityRecord).outerjoin(SourceDocumentRecord)
+            if organization_id is not None:
+                statement = statement.where(
+                    or_(
+                        OpportunityRecord.document_id.is_(None),
+                        SourceDocumentRecord.organization_id == organization_id,
+                    )
+                )
+            records = session.scalars(statement).unique().all()
             return [self._opportunity_from_record(record) for record in records]
 
     def get_embedding(
@@ -384,6 +439,7 @@ class SqlAlchemyStore:
     def _document_from_record(record: SourceDocumentRecord) -> SourceDocument:
         return SourceDocument(
             id=record.id,
+            organization_id=record.organization_id,
             filename=record.filename,
             content=record.content,
             imported_at=record.imported_at,

@@ -99,9 +99,20 @@ class SemanticEmbeddingRecord(Base):
 
 class SourceDocumentRecord(Base):
     __tablename__ = "source_documents"
-    __table_args__ = (UniqueConstraint("sha256", name="uq_source_documents_sha256"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "sha256",
+            name="uq_source_documents_organization_sha256",
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    organization_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        index=True,
+    )
     filename: Mapped[str] = mapped_column(String(500))
     content: Mapped[str] = mapped_column(Text)
     imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

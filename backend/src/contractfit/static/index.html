@@ -62,10 +62,10 @@ async function load(){
   try{
     const[p,o,m,e,jobs]=await Promise.all([
       authFetch('/api/profile').then(json),
-      fetch('/api/opportunities').then(json),
+      authFetch('/api/opportunities').then(json),
       authFetch('/api/matches').then(json),
       authFetch('/api/evaluation').then(json),
-      fetch('/api/processing-jobs').then(json)
+      authFetch('/api/processing-jobs').then(json)
     ]);
     const activeJobs=jobs.filter(job=>['queued','processing'].includes(job.status)).length;
     let reviews=[];
@@ -172,6 +172,7 @@ function uploadDocument(event){
 
   const request=new XMLHttpRequest();
   request.open('POST','/api/documents/upload');
+  if(authToken())request.setRequestHeader('Authorization',`Bearer ${authToken()}`);
   request.responseType='json';
   request.upload.addEventListener('progress',uploadEvent=>{
     if(!uploadEvent.lengthComputable)return;
