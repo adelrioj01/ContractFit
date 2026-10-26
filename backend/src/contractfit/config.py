@@ -29,6 +29,12 @@ class Settings(BaseSettings):
         default="development-only-change-me-32-bytes", min_length=32
     )
     auth_access_token_minutes: int = Field(default=60, ge=1, le=1440)
+    sam_api_key: str | None = None
+    sam_sync_enabled: bool = False
+    sam_sync_interval_minutes: int = Field(default=360, ge=5, le=10080)
+    sam_lookback_days: int = Field(default=7, ge=1, le=365)
+    sam_page_size: int = Field(default=100, ge=1, le=1000)
+    sam_request_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -41,6 +47,8 @@ class Settings(BaseSettings):
             raise ValueError("production requires a private AUTH_SECRET_KEY")
         if self.embedding_provider == "ollama" and self.embedding_dimensions != 768:
             raise ValueError("the current pgvector schema requires 768-dimensional embeddings")
+        if self.sam_sync_enabled and not (self.sam_api_key and self.sam_api_key.strip()):
+            raise ValueError("SAM_SYNC_ENABLED requires a non-empty SAM_API_KEY")
         return self
 
 

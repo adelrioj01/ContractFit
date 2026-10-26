@@ -58,6 +58,25 @@ services:
       redis:
         condition: service_healthy
 
+  sam-ingester:
+    profiles: ["sam"]
+    build:
+      context: ./backend
+    command: ["sh", "-c", "alembic upgrade head && python -m contractfit.sam_worker"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://contractfit:contractfit@postgres:5432/contractfit}
+      STORAGE_BACKEND: postgres
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      SAM_API_KEY: ${SAM_API_KEY:-}
+      SAM_SYNC_ENABLED: ${SAM_SYNC_ENABLED:-false}
+      SAM_SYNC_INTERVAL_MINUTES: ${SAM_SYNC_INTERVAL_MINUTES:-360}
+      SAM_LOOKBACK_DAYS: ${SAM_LOOKBACK_DAYS:-7}
+      SAM_PAGE_SIZE: ${SAM_PAGE_SIZE:-100}
+      SAM_REQUEST_TIMEOUT_SECONDS: ${SAM_REQUEST_TIMEOUT_SECONDS:-30}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   postgres:
     image: pgvector/pgvector:pg17
     environment:

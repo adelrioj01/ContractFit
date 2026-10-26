@@ -12,6 +12,7 @@ from contractfit.domain import (
 )
 from contractfit.embeddings import EmbeddingHit, EmbeddingTarget, SemanticEmbedding
 from contractfit.review import ReviewItem, ReviewStatus, review_sort_key
+from contractfit.sam_models import SamIngestionRun, SamOpportunitySnapshot
 
 
 class ContractFitStore(Protocol):
@@ -43,9 +44,21 @@ class ContractFitStore(Protocol):
     def get_opportunity(
         self, opportunity_id: UUID, organization_id: UUID | None = None
     ) -> Opportunity | None: ...
+    def get_opportunity_by_source(
+        self, source: str, source_id: str
+    ) -> Opportunity | None: ...
     def list_opportunities(
         self, organization_id: UUID | None = None
     ) -> list[Opportunity]: ...
+    def save_sam_ingestion_run(self, run: SamIngestionRun) -> SamIngestionRun: ...
+    def list_sam_ingestion_runs(self) -> list[SamIngestionRun]: ...
+    def save_sam_snapshot(
+        self, snapshot: SamOpportunitySnapshot
+    ) -> SamOpportunitySnapshot: ...
+    def get_latest_sam_snapshot(
+        self, opportunity_id: UUID
+    ) -> SamOpportunitySnapshot | None: ...
+    def list_sam_snapshots(self, opportunity_id: UUID) -> list[SamOpportunitySnapshot]: ...
     def get_embedding(
         self,
         target: EmbeddingTarget,
@@ -86,6 +99,8 @@ class InMemoryStore:
         self.document_pages: dict[UUID, list[DocumentPage]] = {}
         self.processing_jobs: dict[UUID, ProcessingJob] = {}
         self.opportunities: dict[UUID, Opportunity] = {}
+        self.sam_ingestion_runs: dict[UUID, SamIngestionRun] = {}
+        self.sam_snapshots: dict[UUID, SamOpportunitySnapshot] = {}
         self.embeddings: dict[tuple[EmbeddingTarget, UUID, str], SemanticEmbedding] = {}
         self.review_items: dict[UUID, ReviewItem] = {}
         self.identities: dict[UUID, AuthIdentity] = {}
@@ -96,6 +111,8 @@ class InMemoryStore:
         self.document_pages.clear()
         self.processing_jobs.clear()
         self.opportunities.clear()
+        self.sam_ingestion_runs.clear()
+        self.sam_snapshots.clear()
         self.embeddings.clear()
         self.review_items.clear()
         self.identities.clear()
@@ -202,6 +219,18 @@ class InMemoryStore:
             return None
         return opportunity
 
+    def get_opportunity_by_source(
+        self, source: str, source_id: str
+    ) -> Opportunity | None:
+        return next(
+            (
+                item
+                for item in self.opportunities.values()
+                if item.source == source and item.source_id == source_id
+            ),
+            None,
+        )
+
     def list_opportunities(
         self, organization_id: UUID | None = None
     ) -> list[Opportunity]:
@@ -214,6 +243,40 @@ class InMemoryStore:
             if item.document_id is None
             or self.get_document(item.document_id, organization_id) is not None
         ]
+
+    def save_sam_ingestion_run(self, run: SamIngestionRun) -> SamIngestionRun:
+        self.sam_ingestion_runs[run.id] = run
+        return run
+
+    def list_sam_ingestion_runs(self) -> list[SamIngestionRun]:
+        return sorted(
+            self.sam_ingestion_runs.values(),
+            key=lambda item: item.started_at,
+        )
+
+    def save_sam_snapshot(
+        self, snapshot: SamOpportunitySnapshot
+    ) -> SamOpportunitySnapshot:
+        if snapshot.opportunity_id not in self.opportunities:
+            raise ValueError("SAM snapshot opportunity does not exist")
+        self.sam_snapshots[snapshot.id] = snapshot
+        return snapshot
+
+    def get_latest_sam_snapshot(
+        self, opportunity_id: UUID
+    ) -> SamOpportunitySnapshot | None:
+        snapshots = self.list_sam_snapshots(opportunity_id)
+        return snapshots[-1] if snapshots else None
+
+    def list_sam_snapshots(self, opportunity_id: UUID) -> list[SamOpportunitySnapshot]:
+        return sorted(
+            (
+                item
+                for item in self.sam_snapshots.values()
+                if item.opportunity_id == opportunity_id
+            ),
+            key=lambda item: item.observed_at,
+        )
 
     def get_embedding(
         self,

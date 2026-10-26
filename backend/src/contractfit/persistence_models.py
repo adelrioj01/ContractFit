@@ -166,10 +166,13 @@ class ProcessingJobRecord(Base):
 
 class OpportunityRecord(Base):
     __tablename__ = "opportunities"
+    __table_args__ = (
+        UniqueConstraint("source", "source_id", name="uq_opportunities_source_identity"),
+    )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     source: Mapped[str] = mapped_column(String(100))
-    source_id: Mapped[str] = mapped_column(String(255), unique=True)
+    source_id: Mapped[str] = mapped_column(String(255))
     title: Mapped[str] = mapped_column(String(500))
     agency: Mapped[str | None] = mapped_column(String(500))
     response_deadline: Mapped[date | None] = mapped_column(Date)
@@ -187,6 +190,41 @@ class OpportunityRecord(Base):
     review_items: Mapped[list["ReviewItemRecord"]] = relationship(
         back_populates="opportunity"
     )
+    sam_snapshots: Mapped[list["SamOpportunitySnapshotRecord"]] = relationship(
+        back_populates="opportunity",
+        cascade="all, delete-orphan",
+        order_by="SamOpportunitySnapshotRecord.observed_at",
+    )
+
+
+class SamIngestionRunRecord(Base):
+    __tablename__ = "sam_ingestion_runs"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    posted_from: Mapped[date] = mapped_column(Date)
+    posted_to: Mapped[date] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(50), index=True)
+    pages_fetched: Mapped[int] = mapped_column(default=0)
+    records_fetched: Mapped[int] = mapped_column(default=0)
+    created_count: Mapped[int] = mapped_column(default=0)
+    updated_count: Mapped[int] = mapped_column(default=0)
+    unchanged_count: Mapped[int] = mapped_column(default=0)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_message: Mapped[str | None] = mapped_column(Text)
+
+
+class SamOpportunitySnapshotRecord(Base):
+    __tablename__ = "sam_opportunity_snapshots"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    opportunity_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("opportunities.id", ondelete="CASCADE"), index=True
+    )
+    content_sha256: Mapped[str] = mapped_column(String(64), index=True)
+    normalized_payload: Mapped[dict[str, object]] = mapped_column(JSON)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    opportunity: Mapped[OpportunityRecord] = relationship(back_populates="sam_snapshots")
 
 
 class RequirementRecord(Base):

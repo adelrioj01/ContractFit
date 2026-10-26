@@ -37,11 +37,18 @@ from contractfit.persistence_models import (
     RequirementRecord,
     ReviewEvidenceRecord,
     ReviewItemRecord,
+    SamIngestionRunRecord,
+    SamOpportunitySnapshotRecord,
     SemanticEmbeddingRecord,
     SourceDocumentRecord,
     UserAccountRecord,
 )
 from contractfit.review import ReviewItem, ReviewReason, ReviewStatus, review_sort_key
+from contractfit.sam_models import (
+    SamIngestionRun,
+    SamIngestionStatus,
+    SamOpportunitySnapshot,
+)
 
 
 def _ensure_aware(value: datetime) -> datetime:
@@ -57,6 +64,8 @@ class SqlAlchemyStore:
             session.execute(delete(SemanticEmbeddingRecord))
             session.execute(delete(ReviewEvidenceRecord))
             session.execute(delete(ReviewItemRecord))
+            session.execute(delete(SamOpportunitySnapshotRecord))
+            session.execute(delete(SamIngestionRunRecord))
             session.execute(delete(RequirementRecord))
             session.execute(delete(OpportunityRecord))
             session.execute(delete(ProcessingJobRecord))
@@ -204,16 +213,16 @@ class SqlAlchemyStore:
     def save_opportunity(self, opportunity: Opportunity) -> Opportunity:
         with transaction(self.session_factory) as session:
             existing = session.get(OpportunityRecord, opportunity.id)
-            if existing:
-                session.delete(existing)
-                session.flush()
-            record = OpportunityRecord(
-                **opportunity.model_dump(exclude={"requirements"}),
-                requirements=[
-                    self._requirement_to_record(item) for item in opportunity.requirements
-                ],
-            )
-            session.add(record)
+            payload = opportunity.model_dump(exclude={"requirements"})
+            requirements = [
+                self._requirement_to_record(item) for item in opportunity.requirements
+            ]
+            if existing is None:
+                session.add(OpportunityRecord(**payload, requirements=requirements))
+            else:
+                for name, value in payload.items():
+                    setattr(existing, name, value)
+                existing.requirements = requirements
         return opportunity
 
     def get_opportunity(
@@ -235,6 +244,22 @@ class SqlAlchemyStore:
             record = session.scalars(statement).unique().first()
             return self._opportunity_from_record(record) if record else None
 
+    def get_opportunity_by_source(
+        self, source: str, source_id: str
+    ) -> Opportunity | None:
+        with transaction(self.session_factory) as session:
+            record = (
+                session.scalars(
+                    select(OpportunityRecord).where(
+                        OpportunityRecord.source == source,
+                        OpportunityRecord.source_id == source_id,
+                    )
+                )
+                .unique()
+                .first()
+            )
+            return self._opportunity_from_record(record) if record else None
+
     def list_opportunities(
         self, organization_id: UUID | None = None
     ) -> list[Opportunity]:
@@ -249,6 +274,58 @@ class SqlAlchemyStore:
                 )
             records = session.scalars(statement).unique().all()
             return [self._opportunity_from_record(record) for record in records]
+
+    def save_sam_ingestion_run(self, run: SamIngestionRun) -> SamIngestionRun:
+        with transaction(self.session_factory) as session:
+            payload = run.model_dump()
+            payload["status"] = run.status.value
+            session.merge(SamIngestionRunRecord(**payload))
+        return run
+
+    def list_sam_ingestion_runs(self) -> list[SamIngestionRun]:
+        with transaction(self.session_factory) as session:
+            records = session.scalars(
+                select(SamIngestionRunRecord).order_by(
+                    SamIngestionRunRecord.started_at,
+                    SamIngestionRunRecord.id,
+                )
+            ).all()
+            return [self._sam_ingestion_run_from_record(record) for record in records]
+
+    def save_sam_snapshot(
+        self, snapshot: SamOpportunitySnapshot
+    ) -> SamOpportunitySnapshot:
+        with transaction(self.session_factory) as session:
+            if session.get(OpportunityRecord, snapshot.opportunity_id) is None:
+                raise ValueError("SAM snapshot opportunity does not exist")
+            session.add(SamOpportunitySnapshotRecord(**snapshot.model_dump()))
+        return snapshot
+
+    def get_latest_sam_snapshot(
+        self, opportunity_id: UUID
+    ) -> SamOpportunitySnapshot | None:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(SamOpportunitySnapshotRecord)
+                .where(SamOpportunitySnapshotRecord.opportunity_id == opportunity_id)
+                .order_by(
+                    SamOpportunitySnapshotRecord.observed_at.desc(),
+                    SamOpportunitySnapshotRecord.id.desc(),
+                )
+            ).first()
+            return self._sam_snapshot_from_record(record) if record else None
+
+    def list_sam_snapshots(self, opportunity_id: UUID) -> list[SamOpportunitySnapshot]:
+        with transaction(self.session_factory) as session:
+            records = session.scalars(
+                select(SamOpportunitySnapshotRecord)
+                .where(SamOpportunitySnapshotRecord.opportunity_id == opportunity_id)
+                .order_by(
+                    SamOpportunitySnapshotRecord.observed_at,
+                    SamOpportunitySnapshotRecord.id,
+                )
+            ).all()
+            return [self._sam_snapshot_from_record(record) for record in records]
 
     def get_embedding(
         self,
@@ -618,4 +695,35 @@ class SqlAlchemyStore:
             content_sha256=record.content_sha256,
             vector=[float(component) for component in record.embedding],
             created_at=_ensure_aware(record.created_at),
+        )
+
+    @staticmethod
+    def _sam_ingestion_run_from_record(record: SamIngestionRunRecord) -> SamIngestionRun:
+        return SamIngestionRun(
+            id=record.id,
+            posted_from=record.posted_from,
+            posted_to=record.posted_to,
+            status=SamIngestionStatus(record.status),
+            pages_fetched=record.pages_fetched,
+            records_fetched=record.records_fetched,
+            created_count=record.created_count,
+            updated_count=record.updated_count,
+            unchanged_count=record.unchanged_count,
+            started_at=_ensure_aware(record.started_at),
+            finished_at=(
+                _ensure_aware(record.finished_at) if record.finished_at else None
+            ),
+            error_message=record.error_message,
+        )
+
+    @staticmethod
+    def _sam_snapshot_from_record(
+        record: SamOpportunitySnapshotRecord,
+    ) -> SamOpportunitySnapshot:
+        return SamOpportunitySnapshot(
+            id=record.id,
+            opportunity_id=record.opportunity_id,
+            content_sha256=record.content_sha256,
+            normalized_payload=record.normalized_payload,
+            observed_at=_ensure_aware(record.observed_at),
         )
