@@ -122,6 +122,18 @@ The seeded local reviewer account is `demo@contractfit.local` with password
 `contractfit-demo-password`. It is for local development only. Production refuses to start with
 the default signing secret; set a private `AUTH_SECRET_KEY` of at least 32 characters.
 
+The development seed also includes four explicitly synthetic organizations. They share the same
+password and can be selected from the dashboard login panel:
+
+- `demo+cleaning@contractfit.local` — Ozark Civic Cleaning
+- `demo+grounds@contractfit.local` — Prairie Green Grounds
+- `demo+electrical@contractfit.local` — Delta Public Power Services
+- `demo+plumbing@contractfit.local` — GulfLine Plumbing & Backflow
+
+These companies, their past-performance records, and opportunities whose source is
+`synthetic-demo` are invented test fixtures, not customer or procurement records. The historical
+FEMA notice is the only public real-world acceptance case in the default seed.
+
 The default `AI_PROVIDER=offline` makes development deterministic. To exercise local-model
 scoring, run Ollama, download the configured model, and set `AI_PROVIDER=ollama` in `.env`.
 The matching service falls back safely if the local model is unavailable.

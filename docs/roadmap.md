@@ -24,6 +24,7 @@ with both plain text and image-only PDF inputs.
 ## Phase 0: validation
 - Interview 15 facilities-service contractors.
 - Collect five sanitized company profiles.
+- [x] Create five isolated synthetic company profiles for multi-tenant product testing.
 - Manually deliver ranked opportunity reports.
 - Obtain at least two paid-pilot commitments.
 

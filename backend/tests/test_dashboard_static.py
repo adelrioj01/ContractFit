@@ -45,3 +45,16 @@ def test_dashboard_exposes_structured_company_onboarding() -> None:
     assert 'name="project_description"' in dashboard
     assert "authFetch('/api/profile/completeness')" in dashboard
     assert "authFetch('/api/profile',{method:'PUT'" in dashboard
+
+
+def test_dashboard_exposes_synthetic_company_switcher_and_disclosure() -> None:
+    dashboard = (
+        Path(__file__).parents[1] / "src" / "contractfit" / "static" / "index.html"
+    ).read_text(encoding="utf-8")
+
+    assert 'id="demo-company"' in dashboard
+    assert "demo+cleaning@contractfit.local" in dashboard
+    assert "demo+grounds@contractfit.local" in dashboard
+    assert "demo+electrical@contractfit.local" in dashboard
+    assert "demo+plumbing@contractfit.local" in dashboard
+    assert "All demo companies and opportunities are synthetic" in dashboard

@@ -67,6 +67,8 @@ from contractfit.sample_data import (
     REAL_FEMA_SOURCE_URL,
     SAMPLE_PROFILE,
     SAMPLE_SOLICITATION,
+    SYNTHETIC_COMPANY_SEEDS,
+    SYNTHETIC_OPPORTUNITIES,
 )
 from contractfit.store import ContractFitStore, InMemoryStore
 
@@ -293,8 +295,7 @@ def _matcher() -> OpportunityMatcher:
 
 def seed_demo() -> None:
     _store.reset()
-    seed_demo_identity()
-    _store.save_profile(SAMPLE_PROFILE.model_copy(deep=True))
+    seed_demo_companies()
     document = _store.save_document(
         SourceDocument(
             organization_id=SAMPLE_PROFILE.organization_id,
@@ -316,33 +317,52 @@ def seed_demo() -> None:
         update={"source_url": REAL_FEMA_SOURCE_URL}
     )
     _store.save_opportunity(real_opportunity)
+    seed_synthetic_catalog()
+
+
+def seed_demo_companies() -> list[AuthIdentity]:
+    identities: list[AuthIdentity] = []
+    for seed in SYNTHETIC_COMPANY_SEEDS:
+        existing = _store.get_identity_by_email(seed.email)
+        if existing is None:
+            existing = _store.register_identity(
+                AuthIdentity(
+                    user=UserAccount(
+                        id=seed.user_id,
+                        email=seed.email,
+                        display_name=seed.display_name,
+                        password_hash=hash_password(DEMO_PASSWORD),
+                    ),
+                    organization=Organization(
+                        id=seed.profile.organization_id,
+                        name=seed.profile.name,
+                    ),
+                    membership=OrganizationMembership(
+                        organization_id=seed.profile.organization_id,
+                        user_id=seed.user_id,
+                        role=OrganizationRole.ADMIN,
+                    ),
+                )
+            )
+        if _store.get_profile(seed.profile.organization_id) is None:
+            _store.save_profile(seed.profile.model_copy(deep=True))
+        identities.append(existing)
+    return identities
+
+
+def seed_synthetic_catalog() -> None:
+    for opportunity in SYNTHETIC_OPPORTUNITIES:
+        if _store.get_opportunity_by_source(
+            opportunity.source, opportunity.source_id
+        ) is None:
+            _store.save_opportunity(opportunity.model_copy(deep=True))
 
 
 def seed_demo_identity() -> AuthIdentity:
-    existing = _store.get_identity_by_email(DEMO_EMAIL)
-    if existing is not None:
-        return existing
-    organization = Organization(
-        id=SAMPLE_PROFILE.organization_id,
-        name=SAMPLE_PROFILE.name,
-    )
-    user = UserAccount(
-        id=DEMO_USER_ID,
-        email=DEMO_EMAIL,
-        display_name="Demo reviewer",
-        password_hash=hash_password(DEMO_PASSWORD),
-    )
-    return _store.register_identity(
-        AuthIdentity(
-            user=user,
-            organization=organization,
-            membership=OrganizationMembership(
-                organization_id=organization.id,
-                user_id=user.id,
-                role=OrganizationRole.ADMIN,
-            ),
-        )
-    )
+    identity = seed_demo_companies()[0]
+    if identity.user.id != DEMO_USER_ID or identity.user.email != DEMO_EMAIL:
+        raise RuntimeError("primary demo identity configuration is inconsistent")
+    return identity
 
 
 @router.post("/auth/register", response_model=AccessTokenResponse, status_code=201)
@@ -416,7 +436,7 @@ def reset_demo(
         raise HTTPException(status_code=403, detail="Demo identity required")
     seed_demo()
     return {
-        "profiles": 1,
+        "profiles": len(SYNTHETIC_COMPANY_SEEDS),
         "opportunities": len(_store.list_opportunities(identity.organization.id)),
     }
 
