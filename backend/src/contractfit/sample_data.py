@@ -1,7 +1,7 @@
 from decimal import Decimal
 from uuid import UUID
 
-from contractfit.domain import CompanyProfile
+from contractfit.domain import CompanyProfile, PastPerformanceProject
 
 SAMPLE_PROFILE = CompanyProfile(
     id=UUID("9b6720dd-c2fa-4e08-bb21-68ccbc34a1b1"),
@@ -15,6 +15,22 @@ SAMPLE_PROFILE = CompanyProfile(
     certifications=["EPA 608"],
     set_asides=["Small Business"],
     naics_codes=["238220", "561210"],
+    insurance_coverages=["Commercial general liability", "Workers compensation"],
+    contract_preferences=["Preventive maintenance", "Federal facilities"],
+    past_performance=[
+        PastPerformanceProject(
+            title="Central Texas public-facility HVAC maintenance",
+            client="Regional public facilities authority",
+            description=(
+                "Preventive HVAC maintenance, emergency repair, filter replacement, "
+                "building automation inspection, and service reporting."
+            ),
+            service_categories=["HVAC", "preventive maintenance"],
+            state="Texas",
+            contract_value=Decimal(420000),
+            reference_available=True,
+        )
+    ],
     capability_statement=(
         "Commercial HVAC preventive maintenance, filter replacement, emergency repair, "
         "building automation inspection, and service reporting for public facilities."

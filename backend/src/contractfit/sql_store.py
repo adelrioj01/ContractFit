@@ -21,6 +21,7 @@ from contractfit.domain import (
     DocumentStatus,
     Evidence,
     Opportunity,
+    PastPerformanceProject,
     ProcessingJob,
     ProcessingJobStatus,
     ProcessingStage,
@@ -94,7 +95,11 @@ class SqlAlchemyStore:
 
     def save_profile(self, profile: CompanyProfile) -> CompanyProfile:
         with transaction(self.session_factory) as session:
-            session.merge(CompanyProfileRecord(**profile.model_dump()))
+            payload = profile.model_dump()
+            payload["past_performance"] = [
+                project.model_dump(mode="json") for project in profile.past_performance
+            ]
+            session.merge(CompanyProfileRecord(**payload))
         return profile
 
     def save_document(self, document: SourceDocument) -> SourceDocument:
@@ -687,6 +692,12 @@ class SqlAlchemyStore:
             certifications=record.certifications,
             set_asides=record.set_asides,
             naics_codes=record.naics_codes,
+            insurance_coverages=record.insurance_coverages,
+            contract_preferences=record.contract_preferences,
+            past_performance=[
+                PastPerformanceProject.model_validate(item)
+                for item in record.past_performance
+            ],
             capability_statement=record.capability_statement,
         )
 

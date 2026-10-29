@@ -32,7 +32,9 @@ from contractfit.domain import (
     ProcessingJob,
     ProcessingJobStatus,
     ProcessingStage,
+    ProfileCompleteness,
     SourceDocument,
+    assess_profile_completeness,
 )
 from contractfit.embeddings import (
     EmbeddingService,
@@ -442,6 +444,30 @@ def put_profile(
         }
     )
     return _store.save_profile(scoped_profile)
+
+
+@router.get("/profile/completeness", response_model=ProfileCompleteness)
+def get_profile_completeness(
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> ProfileCompleteness:
+    profile = _store.get_profile(identity.organization.id)
+    if profile is None:
+        return ProfileCompleteness(
+            percentage=0,
+            completed_sections=[],
+            missing_sections=[
+                "Services",
+                "Service territory",
+                "Contract capacity",
+                "Licenses and certifications",
+                "Insurance",
+                "Set-aside status",
+                "NAICS codes",
+                "Capability statement",
+                "Past performance",
+            ],
+        )
+    return assess_profile_completeness(profile)
 
 
 @router.post("/opportunities/import-text", response_model=Opportunity, status_code=201)

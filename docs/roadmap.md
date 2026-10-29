@@ -39,9 +39,9 @@ with both plain text and image-only PDF inputs.
 - Migrations, logging, tests and CI.
 
 ## Phase 2: company profiles
-- Services, territory, capacity, licenses, insurance and certifications.
-- Past-performance projects and contract preferences.
-- Editable structured onboarding.
+- [x] Services, territory, capacity, licenses, insurance and certifications.
+- [x] Past-performance projects and contract preferences.
+- [x] Editable structured onboarding with completeness reporting.
 
 ## Phase 3: ingestion
 - [x] Manual PDF, DOCX and TXT opportunity upload.
@@ -68,6 +68,7 @@ with both plain text and image-only PDF inputs.
 - [x] Cached local embeddings and pgvector cosine retrieval for capabilities and scopes.
 - [x] Thirty-case semantic ranking baseline with Top-1, Recall@3 and MRR metrics.
 - [x] Reproducible CLI runner for lexical and local Ollama embedding evaluation.
+- [x] Deterministic evidence-aware past-performance matching.
 - Semantic past-performance matching and expansion to at least 100 labeled ranking cases.
 - [x] Evidence-grounded explanations.
 

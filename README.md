@@ -72,6 +72,7 @@ uv run mypy src
 This repository now contains a working vertical-slice MVP:
 
 - A realistic facilities-contractor profile and editable profile API
+- Three-step company onboarding with profile completeness and past-performance evidence
 - PDF, DOCX and TXT solicitation upload with secure hash-addressed storage and deduplication
 - Page-oriented parsing with evidence-preserving requirement extraction and OCR flags
 - Durable Redis-backed processing jobs with retries and a separate worker
@@ -92,6 +93,7 @@ Useful API routes:
 - `GET /api/auth/me`
 - `GET /api/profile`
 - `PUT /api/profile`
+- `GET /api/profile/completeness`
 - `POST /api/documents/upload`
 - `GET /api/documents`
 - `GET /api/documents/{document_id}/pages`

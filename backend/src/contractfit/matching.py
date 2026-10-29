@@ -29,6 +29,7 @@ class OpportunityMatcher:
             self._set_aside_gate(profile, opportunity),
             self._certification_gate(profile, opportunity),
             self._value_gate(profile, opportunity),
+            self._past_performance_gate(profile, opportunity),
         ]
         if any(gate.status == EligibilityStatus.INELIGIBLE for gate in gates):
             eligibility = EligibilityStatus.INELIGIBLE
@@ -172,4 +173,43 @@ class OpportunityMatcher:
             status=EligibilityStatus.ELIGIBLE if within else EligibilityStatus.INELIGIBLE,
             reason=f"Estimated value ${value:,.0f} {'fits' if within else 'falls outside'} company capacity.",
             evidence=self._evidence(opportunity, "value"),
+        )
+
+    @staticmethod
+    def _past_performance_gate(
+        profile: CompanyProfile, opportunity: Opportunity
+    ) -> GateResult:
+        if not profile.past_performance:
+            return GateResult(
+                name="past_performance",
+                status=EligibilityStatus.NEEDS_REVIEW,
+                reason="Past performance has not been demonstrated in the company profile.",
+            )
+        scope_tokens = {
+            token.strip(".,:;()[]").casefold()
+            for token in opportunity.scope.split()
+            if len(token.strip(".,:;()[]")) >= 4
+        }
+        ranked_projects: list[tuple[int, str]] = []
+        for project in profile.past_performance:
+            evidence_text = " ".join(
+                [project.title, project.description, *project.service_categories]
+            )
+            project_tokens = {
+                token.strip(".,:;()[]").casefold()
+                for token in evidence_text.split()
+                if len(token.strip(".,:;()[]")) >= 4
+            }
+            ranked_projects.append((len(scope_tokens & project_tokens), project.title))
+        overlap, title = max(ranked_projects)
+        if overlap == 0:
+            return GateResult(
+                name="past_performance",
+                status=EligibilityStatus.NEEDS_REVIEW,
+                reason="Past projects are recorded, but no directly relevant experience was found.",
+            )
+        return GateResult(
+            name="past_performance",
+            status=EligibilityStatus.ELIGIBLE,
+            reason=f'Profile project "{title}" supports relevant experience.',
         )

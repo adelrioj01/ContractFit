@@ -70,6 +70,9 @@ class CompanyProfileRecord(Base):
     certifications: Mapped[list[str]] = mapped_column(JSON)
     set_asides: Mapped[list[str]] = mapped_column(JSON)
     naics_codes: Mapped[list[str]] = mapped_column(JSON)
+    insurance_coverages: Mapped[list[str]] = mapped_column(JSON)
+    contract_preferences: Mapped[list[str]] = mapped_column(JSON)
+    past_performance: Mapped[list[dict[str, object]]] = mapped_column(JSON)
     capability_statement: Mapped[str] = mapped_column(Text)
 
 

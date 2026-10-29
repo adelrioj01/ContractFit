@@ -32,3 +32,16 @@ def test_dashboard_authenticates_async_processing_polling() -> None:
     assert (
         "authFetch(`/api/processing-jobs/${encodeURIComponent(jobId)}`)" in dashboard
     )
+
+
+def test_dashboard_exposes_structured_company_onboarding() -> None:
+    dashboard = (
+        Path(__file__).parents[1] / "src" / "contractfit" / "static" / "index.html"
+    ).read_text(encoding="utf-8")
+
+    assert 'href="#profile"' in dashboard
+    assert 'id="profile-form"' in dashboard
+    assert 'name="insurance_coverages"' in dashboard
+    assert 'name="project_description"' in dashboard
+    assert "authFetch('/api/profile/completeness')" in dashboard
+    assert "authFetch('/api/profile',{method:'PUT'" in dashboard
