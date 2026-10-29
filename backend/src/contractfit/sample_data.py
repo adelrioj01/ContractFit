@@ -30,3 +30,15 @@ Required certification: EPA 608
 Estimated value: $240,000
 Scope: Quarterly commercial HVAC preventive maintenance, filter replacement, emergency repair, and service reporting for a federal office building.
 """
+
+REAL_FEMA_SOURCE_URL = "https://sam.gov/opp/29ba469d073b45d9a934a2577cc0211a/view"
+
+# Public historical notice used as an honest demo acceptance case.
+REAL_FEMA_SOLICITATION = """Title: HVAC Maintenance (Denton, TX) — SAM.gov 70FB8026Q00000053
+Agency: Department of Homeland Security, Federal Emergency Management Agency
+Response deadline: 2026-09-03
+Place of performance: Denton, Texas 76208
+Set-aside: Small Business
+Scope: Single-site seasonal preventive maintenance and operational tune-ups on four Western Shelter CL-ACXE1200 environmental control units. The contractor provides labor, transportation, tools, equipment, materials, and expertise.
+Source URL: https://sam.gov/opp/29ba469d073b45d9a934a2577cc0211a/view
+"""

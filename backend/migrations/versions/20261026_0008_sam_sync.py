@@ -65,6 +65,23 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    duplicate_source_id = op.get_bind().execute(
+        sa.text(
+            """
+            SELECT source_id
+            FROM opportunities
+            GROUP BY source_id
+            HAVING COUNT(*) > 1
+            LIMIT 1
+            """
+        )
+    ).scalar_one_or_none()
+    if duplicate_source_id is not None:
+        raise RuntimeError(
+            "cannot downgrade SAM identity migration while multiple providers share "
+            f"source_id={duplicate_source_id!r}"
+        )
+
     op.drop_index(
         "ix_sam_opportunity_snapshots_content_sha256",
         table_name="sam_opportunity_snapshots",

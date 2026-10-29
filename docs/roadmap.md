@@ -49,7 +49,7 @@ with both plain text and image-only PDF inputs.
 - [x] Persisted SAM.gov import workflow with scheduling, deduplication and amendment detection.
 - [x] Secure attachment storage, SHA-256 hashing and deduplication.
 - [x] Normalized amendment snapshots and version history.
-- Fetch and version SAM.gov solicitation attachments.
+- [x] Fetch and version SAM.gov solicitation attachments by source snapshot.
 - [x] Durable, retryable Redis-backed background processing.
 
 ## Phase 4: document intelligence
@@ -60,7 +60,7 @@ with both plain text and image-only PDF inputs.
 - [x] Evidence-linked human-review domain model with deterministic priority and audited decisions.
 - [x] Organization-scoped persisted review queue and resolution API.
 - [x] Basic reviewer dashboard for correcting or dismissing low-confidence fields.
-- Replace the dashboard's local reviewer identity with authenticated user identity.
+- [x] Replace the dashboard's local reviewer identity with authenticated user identity.
 
 ## Phase 5: matching
 - [x] Deterministic hard gates.
@@ -74,6 +74,7 @@ with both plain text and image-only PDF inputs.
 ## Phase 6: product workflow
 - Ranked opportunity dashboard.
 - Opportunity details and document viewer.
+- [x] Organization-owned opportunity pipeline with status, owner and next action.
 - Watched opportunities, deadlines and amendments.
 - User relevance feedback.
 

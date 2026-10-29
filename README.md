@@ -76,6 +76,7 @@ This repository now contains a working vertical-slice MVP:
 - Page-oriented parsing with evidence-preserving requirement extraction and OCR flags
 - Durable Redis-backed processing jobs with retries and a separate worker
 - Scheduled SAM.gov catalog synchronization with pagination, deduplication and amendment snapshots
+- On-demand SAM.gov attachment download into an organization-owned analysis workspace
 - Local Tesseract OCR for scanned PDF pages
 - Deterministic deadline, territory, set-aside, certification, and capacity gates
 - Hybrid fit scoring with an optional local Ollama model and an offline fallback
@@ -99,6 +100,11 @@ Useful API routes:
 - `POST /api/processing-jobs/{job_id}/retry`
 - `POST /api/opportunities/import-text`
 - `GET /api/opportunities`
+- `POST /api/pipeline/items`
+- `GET /api/pipeline/items`
+- `PATCH /api/pipeline/items/{item_id}`
+- `GET /api/opportunities/{opportunity_id}/attachments`
+- `POST /api/opportunities/{opportunity_id}/attachments/{attachment_id}/analyze`
 - `GET /api/matches`
 - `GET /api/evaluation`
 - `GET /api/evaluation/ranking`
@@ -169,6 +175,12 @@ The default schedule checks the last seven days every six hours. `SAM_LOOKBACK_D
 `SAM_SYNC_INTERVAL_MINUTES`, `SAM_PAGE_SIZE`, and `SAM_REQUEST_TIMEOUT_SECONDS` are configurable.
 Each run is audited in PostgreSQL. New and amended records create immutable normalized snapshots;
 unchanged records are not duplicated. API keys are never stored in run errors or snapshots.
+
+SAM snapshots also retain the provider's `resourceLinks`. Authenticated users can list those
+attachments from the opportunity dashboard and request analysis. ContractFit adds the SAM API key
+on the server, accepts PDF, DOCX, and TXT files up to `UPLOAD_MAX_BYTES`, and creates a private
+source document for the requesting organization. Repeated requests from that organization reuse
+the same document and processing job.
 
 ## Persistence
 

@@ -54,6 +54,11 @@ class SourceDocument(BaseModel):
     status: DocumentStatus = DocumentStatus.READY
     page_count: int = Field(default=1, ge=0)
     error_message: str | None = None
+    origin_opportunity_id: UUID | None = None
+    origin_url: str | None = None
+    origin_snapshot_sha256: str | None = Field(
+        default=None, min_length=64, max_length=64
+    )
 
 
 class DocumentPage(BaseModel):

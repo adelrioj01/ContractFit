@@ -32,6 +32,7 @@ def opportunity_record(notice_id: str, title: str) -> SamOpportunityRecord:
         classification_code="S201",
         description_url=f"https://api.sam.gov/{notice_id}",
         opportunity_url=f"https://sam.gov/opp/{notice_id}/view",
+        resource_links=(f"https://api.sam.gov/resources/{notice_id}.pdf",),
         active=True,
     )
 

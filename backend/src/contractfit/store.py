@@ -11,6 +11,7 @@ from contractfit.domain import (
     SourceDocument,
 )
 from contractfit.embeddings import EmbeddingHit, EmbeddingTarget, SemanticEmbedding
+from contractfit.pipeline import PipelineItem
 from contractfit.review import ReviewItem, ReviewStatus, review_sort_key
 from contractfit.sam_models import SamIngestionRun, SamOpportunitySnapshot
 
@@ -26,6 +27,21 @@ class ContractFitStore(Protocol):
     def find_document_by_sha256(
         self, sha256: str, organization_id: UUID
     ) -> SourceDocument | None: ...
+    def find_document_by_origin(
+        self,
+        origin_opportunity_id: UUID,
+        origin_url: str,
+        origin_snapshot_sha256: str,
+        organization_id: UUID,
+    ) -> SourceDocument | None: ...
+    def save_document_origin(
+        self,
+        document_id: UUID,
+        origin_opportunity_id: UUID,
+        origin_url: str,
+        origin_snapshot_sha256: str,
+        organization_id: UUID,
+    ) -> None: ...
     def list_documents(self, organization_id: UUID) -> list[SourceDocument]: ...
     def save_document_pages(self, pages: list[DocumentPage]) -> list[DocumentPage]: ...
     def list_document_pages(
@@ -50,6 +66,14 @@ class ContractFitStore(Protocol):
     def list_opportunities(
         self, organization_id: UUID | None = None
     ) -> list[Opportunity]: ...
+    def save_pipeline_item(self, item: PipelineItem) -> PipelineItem: ...
+    def get_pipeline_item(
+        self, item_id: UUID, organization_id: UUID
+    ) -> PipelineItem | None: ...
+    def get_pipeline_item_by_opportunity(
+        self, opportunity_id: UUID, organization_id: UUID
+    ) -> PipelineItem | None: ...
+    def list_pipeline_items(self, organization_id: UUID) -> list[PipelineItem]: ...
     def save_sam_ingestion_run(self, run: SamIngestionRun) -> SamIngestionRun: ...
     def list_sam_ingestion_runs(self) -> list[SamIngestionRun]: ...
     def save_sam_snapshot(
@@ -96,9 +120,11 @@ class InMemoryStore:
     def __init__(self) -> None:
         self.profiles: dict[UUID, CompanyProfile] = {}
         self.documents: dict[UUID, SourceDocument] = {}
+        self.document_origins: dict[tuple[UUID, UUID, str, str], UUID] = {}
         self.document_pages: dict[UUID, list[DocumentPage]] = {}
         self.processing_jobs: dict[UUID, ProcessingJob] = {}
         self.opportunities: dict[UUID, Opportunity] = {}
+        self.pipeline_items: dict[UUID, PipelineItem] = {}
         self.sam_ingestion_runs: dict[UUID, SamIngestionRun] = {}
         self.sam_snapshots: dict[UUID, SamOpportunitySnapshot] = {}
         self.embeddings: dict[tuple[EmbeddingTarget, UUID, str], SemanticEmbedding] = {}
@@ -108,9 +134,11 @@ class InMemoryStore:
     def reset(self) -> None:
         self.profiles.clear()
         self.documents.clear()
+        self.document_origins.clear()
         self.document_pages.clear()
         self.processing_jobs.clear()
         self.opportunities.clear()
+        self.pipeline_items.clear()
         self.sam_ingestion_runs.clear()
         self.sam_snapshots.clear()
         self.embeddings.clear()
@@ -155,6 +183,45 @@ class InMemoryStore:
             ),
             None,
         )
+
+    def find_document_by_origin(
+        self,
+        origin_opportunity_id: UUID,
+        origin_url: str,
+        origin_snapshot_sha256: str,
+        organization_id: UUID,
+    ) -> SourceDocument | None:
+        document_id = self.document_origins.get(
+            (organization_id, origin_opportunity_id, origin_url, origin_snapshot_sha256)
+        )
+        if document_id is not None:
+            return self.get_document(document_id, organization_id)
+        return next(
+            (
+                item
+                for item in self.documents.values()
+                if item.origin_opportunity_id == origin_opportunity_id
+                and item.origin_url == origin_url
+                and item.origin_snapshot_sha256 == origin_snapshot_sha256
+                and item.organization_id == organization_id
+            ),
+            None,
+        )
+
+    def save_document_origin(
+        self,
+        document_id: UUID,
+        origin_opportunity_id: UUID,
+        origin_url: str,
+        origin_snapshot_sha256: str,
+        organization_id: UUID,
+    ) -> None:
+        document = self.get_document(document_id, organization_id)
+        if document is None:
+            raise ValueError("document is not visible to the organization")
+        self.document_origins[
+            (organization_id, origin_opportunity_id, origin_url, origin_snapshot_sha256)
+        ] = document_id
 
     def list_documents(self, organization_id: UUID) -> list[SourceDocument]:
         return [
@@ -243,6 +310,47 @@ class InMemoryStore:
             if item.document_id is None
             or self.get_document(item.document_id, organization_id) is not None
         ]
+
+    def save_pipeline_item(self, item: PipelineItem) -> PipelineItem:
+        if self.get_opportunity(item.opportunity_id, item.organization_id) is None:
+            raise ValueError("pipeline opportunity is not visible to the organization")
+        duplicate = self.get_pipeline_item_by_opportunity(
+            item.opportunity_id, item.organization_id
+        )
+        if duplicate is not None and duplicate.id != item.id:
+            raise ValueError("opportunity is already in the pipeline")
+        self.pipeline_items[item.id] = item
+        return item
+
+    def get_pipeline_item(
+        self, item_id: UUID, organization_id: UUID
+    ) -> PipelineItem | None:
+        item = self.pipeline_items.get(item_id)
+        return item if item is not None and item.organization_id == organization_id else None
+
+    def get_pipeline_item_by_opportunity(
+        self, opportunity_id: UUID, organization_id: UUID
+    ) -> PipelineItem | None:
+        return next(
+            (
+                item
+                for item in self.pipeline_items.values()
+                if item.organization_id == organization_id
+                and item.opportunity_id == opportunity_id
+            ),
+            None,
+        )
+
+    def list_pipeline_items(self, organization_id: UUID) -> list[PipelineItem]:
+        return sorted(
+            (
+                item
+                for item in self.pipeline_items.values()
+                if item.organization_id == organization_id
+            ),
+            key=lambda item: (item.updated_at, item.id),
+            reverse=True,
+        )
 
     def save_sam_ingestion_run(self, run: SamIngestionRun) -> SamIngestionRun:
         self.sam_ingestion_runs[run.id] = run

@@ -123,11 +123,32 @@ class SourceDocumentRecord(Base):
     status: Mapped[str] = mapped_column(String(50), default="ready", index=True)
     page_count: Mapped[int] = mapped_column(default=1)
     error_message: Mapped[str | None] = mapped_column(Text)
+    origin_opportunity_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("opportunities.id", ondelete="SET NULL"), index=True
+    )
+    origin_url: Mapped[str | None] = mapped_column(String(2000))
+    origin_snapshot_sha256: Mapped[str | None] = mapped_column(String(64), index=True)
     pages: Mapped[list["DocumentPageRecord"]] = relationship(
         back_populates="document", cascade="all, delete-orphan"
     )
     processing_jobs: Mapped[list["ProcessingJobRecord"]] = relationship(
         back_populates="document", cascade="all, delete-orphan"
+    )
+
+
+class DocumentOriginRecord(Base):
+    __tablename__ = "document_origins"
+
+    organization_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id", ondelete="CASCADE"), primary_key=True
+    )
+    opportunity_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("opportunities.id", ondelete="CASCADE"), primary_key=True
+    )
+    origin_url: Mapped[str] = mapped_column(String(2000), primary_key=True)
+    snapshot_sha256: Mapped[str] = mapped_column(String(64), primary_key=True)
+    document_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("source_documents.id", ondelete="CASCADE"), index=True
     )
 
 
@@ -195,6 +216,33 @@ class OpportunityRecord(Base):
         cascade="all, delete-orphan",
         order_by="SamOpportunitySnapshotRecord.observed_at",
     )
+
+
+class PipelineItemRecord(Base):
+    __tablename__ = "pipeline_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "opportunity_id",
+            name="uq_pipeline_items_organization_opportunity",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    organization_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id", ondelete="CASCADE"), index=True
+    )
+    opportunity_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("opportunities.id", ondelete="CASCADE"), index=True
+    )
+    status: Mapped[str] = mapped_column(String(50), index=True)
+    owner_user_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("user_accounts.id", ondelete="SET NULL"), index=True
+    )
+    next_action: Mapped[str | None] = mapped_column(String(500))
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
 class SamIngestionRunRecord(Base):

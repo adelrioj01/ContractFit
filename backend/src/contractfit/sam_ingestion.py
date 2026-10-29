@@ -59,6 +59,7 @@ class SamOpportunityRecord:
     classification_code: str | None
     description_url: str | None
     opportunity_url: str | None
+    resource_links: tuple[str, ...]
     active: bool
 
 
@@ -202,6 +203,7 @@ def _normalize_record(raw: Mapping[str, Any]) -> SamOpportunityRecord:
         classification_code=_optional_text(raw.get("classificationCode")),
         description_url=_optional_text(raw.get("description")),
         opportunity_url=_optional_text(raw.get("uiLink")),
+        resource_links=_resource_links(raw.get("resourceLinks")),
         active=_optional_bool(raw.get("active"), default=True),
     )
 
@@ -267,4 +269,18 @@ def _optional_bool(value: Any, *, default: bool) -> bool:
         if normalized in {"false", "no", "0"}:
             return False
     raise SamResponseError("active must be a boolean")
+
+
+def _resource_links(value: Any) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise SamResponseError("resourceLinks must be a list")
+    links: list[str] = []
+    for index, item in enumerate(value):
+        link = _optional_text(item)
+        if link is None:
+            raise SamResponseError(f"resourceLinks at index {index} must be a URL string")
+        links.append(link)
+    return tuple(dict.fromkeys(links))
 

@@ -1,7 +1,11 @@
 from contractfit.domain import EligibilityStatus, SourceDocument
 from contractfit.extraction import RequirementExtractor
 from contractfit.matching import OpportunityMatcher
-from contractfit.sample_data import SAMPLE_PROFILE, SAMPLE_SOLICITATION
+from contractfit.sample_data import (
+    REAL_FEMA_SOLICITATION,
+    SAMPLE_PROFILE,
+    SAMPLE_SOLICITATION,
+)
 
 
 def test_matching_applies_hard_gates_and_explains_score() -> None:
@@ -39,3 +43,24 @@ def test_matching_accepts_embedding_similarity_without_bypassing_hard_gates() ->
     assert result.eligibility == EligibilityStatus.ELIGIBLE
     assert result.fit_score > 90
     assert "91%" in result.explanation
+
+
+def test_real_fema_denton_notice_is_no_go_after_its_deadline() -> None:
+    opportunity = RequirementExtractor().extract(
+        SourceDocument(
+            organization_id=SAMPLE_PROFILE.organization_id,
+            filename="sam-70FB8026Q00000053.txt",
+            content=REAL_FEMA_SOLICITATION,
+        ),
+        "SAM-70FB8026Q00000053",
+    )
+
+    result = OpportunityMatcher().match(SAMPLE_PROFILE, opportunity)
+    gates = {gate.name: gate for gate in result.gates}
+
+    assert opportunity.title.startswith("HVAC Maintenance (Denton, TX)")
+    assert gates["deadline"].status == EligibilityStatus.INELIGIBLE
+    assert gates["location"].status == EligibilityStatus.ELIGIBLE
+    assert gates["set_aside"].status == EligibilityStatus.ELIGIBLE
+    assert result.eligibility == EligibilityStatus.INELIGIBLE
+    assert result.fit_score <= 39

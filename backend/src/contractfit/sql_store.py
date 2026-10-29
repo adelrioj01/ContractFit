@@ -3,6 +3,7 @@ from typing import cast
 from uuid import UUID
 
 from sqlalchemy import delete, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -29,10 +30,12 @@ from contractfit.domain import (
 from contractfit.embeddings import EmbeddingHit, EmbeddingTarget, SemanticEmbedding
 from contractfit.persistence_models import (
     CompanyProfileRecord,
+    DocumentOriginRecord,
     DocumentPageRecord,
     OpportunityRecord,
     OrganizationMembershipRecord,
     OrganizationRecord,
+    PipelineItemRecord,
     ProcessingJobRecord,
     RequirementRecord,
     ReviewEvidenceRecord,
@@ -43,6 +46,7 @@ from contractfit.persistence_models import (
     SourceDocumentRecord,
     UserAccountRecord,
 )
+from contractfit.pipeline import PipelineItem, PipelineStatus
 from contractfit.review import ReviewItem, ReviewReason, ReviewStatus, review_sort_key
 from contractfit.sam_models import (
     SamIngestionRun,
@@ -64,6 +68,8 @@ class SqlAlchemyStore:
             session.execute(delete(SemanticEmbeddingRecord))
             session.execute(delete(ReviewEvidenceRecord))
             session.execute(delete(ReviewItemRecord))
+            session.execute(delete(PipelineItemRecord))
+            session.execute(delete(DocumentOriginRecord))
             session.execute(delete(SamOpportunitySnapshotRecord))
             session.execute(delete(SamIngestionRunRecord))
             session.execute(delete(RequirementRecord))
@@ -123,6 +129,62 @@ class SqlAlchemyStore:
                 )
             ).first()
             return self._document_from_record(record) if record else None
+
+    def find_document_by_origin(
+        self,
+        origin_opportunity_id: UUID,
+        origin_url: str,
+        origin_snapshot_sha256: str,
+        organization_id: UUID,
+    ) -> SourceDocument | None:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(SourceDocumentRecord)
+                .join(
+                    DocumentOriginRecord,
+                    DocumentOriginRecord.document_id == SourceDocumentRecord.id,
+                )
+                .where(
+                    DocumentOriginRecord.opportunity_id == origin_opportunity_id,
+                    DocumentOriginRecord.origin_url == origin_url,
+                    DocumentOriginRecord.snapshot_sha256 == origin_snapshot_sha256,
+                    DocumentOriginRecord.organization_id == organization_id,
+                    SourceDocumentRecord.organization_id == organization_id,
+                )
+            ).first()
+            if record is None:
+                record = session.scalars(
+                    select(SourceDocumentRecord).where(
+                        SourceDocumentRecord.origin_opportunity_id
+                        == origin_opportunity_id,
+                        SourceDocumentRecord.origin_url == origin_url,
+                        SourceDocumentRecord.origin_snapshot_sha256
+                        == origin_snapshot_sha256,
+                        SourceDocumentRecord.organization_id == organization_id,
+                    )
+                ).first()
+            return self._document_from_record(record) if record else None
+
+    def save_document_origin(
+        self,
+        document_id: UUID,
+        origin_opportunity_id: UUID,
+        origin_url: str,
+        origin_snapshot_sha256: str,
+        organization_id: UUID,
+    ) -> None:
+        if self.get_document(document_id, organization_id) is None:
+            raise ValueError("document is not visible to the organization")
+        with transaction(self.session_factory) as session:
+            session.merge(
+                DocumentOriginRecord(
+                    organization_id=organization_id,
+                    opportunity_id=origin_opportunity_id,
+                    origin_url=origin_url,
+                    snapshot_sha256=origin_snapshot_sha256,
+                    document_id=document_id,
+                )
+            )
 
     def list_documents(self, organization_id: UUID) -> list[SourceDocument]:
         with transaction(self.session_factory) as session:
@@ -231,7 +293,10 @@ class SqlAlchemyStore:
         with transaction(self.session_factory) as session:
             statement = (
                 select(OpportunityRecord)
-                .outerjoin(SourceDocumentRecord)
+                .outerjoin(
+                    SourceDocumentRecord,
+                    OpportunityRecord.document_id == SourceDocumentRecord.id,
+                )
                 .where(OpportunityRecord.id == opportunity_id)
             )
             if organization_id is not None:
@@ -264,7 +329,10 @@ class SqlAlchemyStore:
         self, organization_id: UUID | None = None
     ) -> list[Opportunity]:
         with transaction(self.session_factory) as session:
-            statement = select(OpportunityRecord).outerjoin(SourceDocumentRecord)
+            statement = select(OpportunityRecord).outerjoin(
+                SourceDocumentRecord,
+                OpportunityRecord.document_id == SourceDocumentRecord.id,
+            )
             if organization_id is not None:
                 statement = statement.where(
                     or_(
@@ -274,6 +342,63 @@ class SqlAlchemyStore:
                 )
             records = session.scalars(statement).unique().all()
             return [self._opportunity_from_record(record) for record in records]
+
+    def save_pipeline_item(self, item: PipelineItem) -> PipelineItem:
+        if self.get_opportunity(item.opportunity_id, item.organization_id) is None:
+            raise ValueError("pipeline opportunity is not visible to the organization")
+        try:
+            with transaction(self.session_factory) as session:
+                duplicate = session.scalars(
+                    select(PipelineItemRecord).where(
+                        PipelineItemRecord.organization_id == item.organization_id,
+                        PipelineItemRecord.opportunity_id == item.opportunity_id,
+                        PipelineItemRecord.id != item.id,
+                    )
+                ).first()
+                if duplicate is not None:
+                    raise ValueError("opportunity is already in the pipeline")
+                payload = item.model_dump()
+                payload["status"] = item.status.value
+                session.merge(PipelineItemRecord(**payload))
+        except IntegrityError as exc:
+            raise ValueError("opportunity is already in the pipeline") from exc
+        return item
+
+    def get_pipeline_item(
+        self, item_id: UUID, organization_id: UUID
+    ) -> PipelineItem | None:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(PipelineItemRecord).where(
+                    PipelineItemRecord.id == item_id,
+                    PipelineItemRecord.organization_id == organization_id,
+                )
+            ).first()
+            return self._pipeline_item_from_record(record) if record else None
+
+    def get_pipeline_item_by_opportunity(
+        self, opportunity_id: UUID, organization_id: UUID
+    ) -> PipelineItem | None:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(PipelineItemRecord).where(
+                    PipelineItemRecord.opportunity_id == opportunity_id,
+                    PipelineItemRecord.organization_id == organization_id,
+                )
+            ).first()
+            return self._pipeline_item_from_record(record) if record else None
+
+    def list_pipeline_items(self, organization_id: UUID) -> list[PipelineItem]:
+        with transaction(self.session_factory) as session:
+            records = session.scalars(
+                select(PipelineItemRecord)
+                .where(PipelineItemRecord.organization_id == organization_id)
+                .order_by(
+                    PipelineItemRecord.updated_at.desc(),
+                    PipelineItemRecord.id.desc(),
+                )
+            ).all()
+            return [self._pipeline_item_from_record(record) for record in records]
 
     def save_sam_ingestion_run(self, run: SamIngestionRun) -> SamIngestionRun:
         with transaction(self.session_factory) as session:
@@ -402,7 +527,10 @@ class SqlAlchemyStore:
             if item.opportunity_id is not None:
                 visible_opportunity = session.scalars(
                     select(OpportunityRecord)
-                    .outerjoin(SourceDocumentRecord)
+                    .outerjoin(
+                        SourceDocumentRecord,
+                        OpportunityRecord.document_id == SourceDocumentRecord.id,
+                    )
                     .where(
                         OpportunityRecord.id == item.opportunity_id,
                         or_(
@@ -577,6 +705,9 @@ class SqlAlchemyStore:
             status=DocumentStatus(record.status),
             page_count=record.page_count,
             error_message=record.error_message,
+            origin_opportunity_id=record.origin_opportunity_id,
+            origin_url=record.origin_url,
+            origin_snapshot_sha256=record.origin_snapshot_sha256,
         )
 
     @staticmethod
@@ -645,6 +776,20 @@ class SqlAlchemyStore:
             source_url=record.source_url,
             document_id=record.document_id,
             requirements=requirements,
+        )
+
+    @staticmethod
+    def _pipeline_item_from_record(record: PipelineItemRecord) -> PipelineItem:
+        return PipelineItem(
+            id=record.id,
+            organization_id=record.organization_id,
+            opportunity_id=record.opportunity_id,
+            status=PipelineStatus(record.status),
+            owner_user_id=record.owner_user_id,
+            next_action=record.next_action,
+            notes=record.notes,
+            created_at=_ensure_aware(record.created_at),
+            updated_at=_ensure_aware(record.updated_at),
         )
 
     @staticmethod

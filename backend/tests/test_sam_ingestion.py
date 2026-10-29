@@ -67,6 +67,10 @@ def _payload() -> dict[str, Any]:
                 "classificationCode": "S201",
                 "description": "https://sam.gov/api/prod/opps/v3/opportunities/resources",
                 "uiLink": "https://sam.gov/opp/notice-123/view",
+                "resourceLinks": [
+                    "https://api.sam.gov/resources/specification.pdf",
+                    "https://api.sam.gov/resources/specification.pdf",
+                ],
                 "active": "true",
             }
         ],
@@ -105,6 +109,9 @@ def test_queries_active_opportunities_and_normalizes_record() -> None:
         2026, 11, 4, 17, tzinfo=UTC
     )
     assert record.active is True
+    assert record.resource_links == (
+        "https://api.sam.gov/resources/specification.pdf",
+    )
 
 
 def test_optional_fields_are_normalized_without_sam_shape_leaking() -> None:
@@ -126,6 +133,7 @@ def test_optional_fields_are_normalized_without_sam_shape_leaking() -> None:
 
     assert record.solicitation_number is None
     assert record.response_deadline is None
+    assert record.resource_links == ()
     assert record.active is False
 
 
@@ -176,6 +184,19 @@ def test_rejects_invalid_date_range_and_offset() -> None:
                 ],
             },
             "postedDate",
+        ),
+        (
+            {
+                "totalRecords": 1,
+                "opportunitiesData": [
+                    {
+                        "noticeId": "n",
+                        "title": "Bad resources",
+                        "resourceLinks": "not-a-list",
+                    }
+                ],
+            },
+            "resourceLinks",
         ),
     ],
 )
