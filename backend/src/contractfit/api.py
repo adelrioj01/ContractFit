@@ -71,6 +71,12 @@ from contractfit.sample_data import (
     SYNTHETIC_OPPORTUNITIES,
 )
 from contractfit.store import ContractFitStore, InMemoryStore
+from contractfit.watching import (
+    AlertStatus,
+    OpportunityAlert,
+    OpportunityWatch,
+    refresh_opportunity_alerts,
+)
 
 router = APIRouter(prefix="/api")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
@@ -165,6 +171,10 @@ class UpdatePipelineItemRequest(BaseModel):
     notes: str | None = Field(default=None, max_length=4000)
 
 
+class UpdateOpportunityAlertRequest(BaseModel):
+    status: AlertStatus
+
+
 class RegisterRequest(BaseModel):
     organization_name: str = Field(min_length=1, max_length=255)
     email: str = Field(min_length=3, max_length=320)
@@ -226,9 +236,7 @@ def _processor() -> DocumentProcessor:
         settings = get_settings()
         _document_processor = DocumentProcessor(
             _store,
-            LocalFileStorage(
-                Path(settings.upload_directory), max_bytes=settings.upload_max_bytes
-            ),
+            LocalFileStorage(Path(settings.upload_directory), max_bytes=settings.upload_max_bytes),
         )
     return _document_processor
 
@@ -313,9 +321,7 @@ def seed_demo() -> None:
     )
     real_opportunity = extractor.extract(
         real_document, source_id="SAM-70FB8026Q00000053"
-    ).model_copy(
-        update={"source_url": REAL_FEMA_SOURCE_URL}
-    )
+    ).model_copy(update={"source_url": REAL_FEMA_SOURCE_URL})
     _store.save_opportunity(real_opportunity)
     seed_synthetic_catalog()
 
@@ -352,9 +358,7 @@ def seed_demo_companies() -> list[AuthIdentity]:
 
 def seed_synthetic_catalog() -> None:
     for opportunity in SYNTHETIC_OPPORTUNITIES:
-        if _store.get_opportunity_by_source(
-            opportunity.source, opportunity.source_id
-        ) is None:
+        if _store.get_opportunity_by_source(opportunity.source, opportunity.source_id) is None:
             _store.save_opportunity(opportunity.model_copy(deep=True))
 
 
@@ -749,9 +753,7 @@ def list_opportunities(
             item.response_deadline is None or item.response_deadline >= today
         ):
             return False
-        return not (
-            deadline_status == "unknown" and item.response_deadline is not None
-        )
+        return not (deadline_status == "unknown" and item.response_deadline is not None)
 
     return sorted(
         (item for item in opportunities if matches(item)),
@@ -771,9 +773,7 @@ def create_pipeline_item(
     organization_id = identity.organization.id
     if _store.get_opportunity(request.opportunity_id, organization_id) is None:
         raise HTTPException(status_code=404, detail="Opportunity not found")
-    if _store.get_pipeline_item_by_opportunity(
-        request.opportunity_id, organization_id
-    ) is not None:
+    if _store.get_pipeline_item_by_opportunity(request.opportunity_id, organization_id) is not None:
         raise HTTPException(status_code=409, detail="Opportunity is already in the pipeline")
     item = PipelineItem(
         organization_id=organization_id,
@@ -812,9 +812,62 @@ def update_pipeline_item(
     return _store.save_pipeline_item(item.model_copy(update=changes))
 
 
-def _sam_opportunity(
-    opportunity_id: UUID, identity: AuthIdentity
-) -> Opportunity:
+@router.post("/watches/{opportunity_id}", response_model=OpportunityWatch, status_code=201)
+def create_opportunity_watch(
+    opportunity_id: UUID,
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> OpportunityWatch:
+    organization_id = identity.organization.id
+    if _store.get_opportunity(opportunity_id, organization_id) is None:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+    if _store.get_opportunity_watch(opportunity_id, organization_id) is not None:
+        raise HTTPException(status_code=409, detail="Opportunity is already watched")
+    try:
+        return _store.save_opportunity_watch(
+            OpportunityWatch(organization_id=organization_id, opportunity_id=opportunity_id)
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get("/watches", response_model=list[OpportunityWatch])
+def list_opportunity_watches(
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> list[OpportunityWatch]:
+    return _store.list_opportunity_watches(identity.organization.id)
+
+
+@router.delete("/watches/{opportunity_id}", status_code=204)
+def delete_opportunity_watch(
+    opportunity_id: UUID,
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> None:
+    if not _store.delete_opportunity_watch(opportunity_id, identity.organization.id):
+        raise HTTPException(status_code=404, detail="Opportunity watch not found")
+
+
+@router.get("/alerts", response_model=list[OpportunityAlert])
+def list_opportunity_alerts(
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> list[OpportunityAlert]:
+    return refresh_opportunity_alerts(_store, identity.organization.id)
+
+
+@router.patch("/alerts/{alert_id}", response_model=OpportunityAlert)
+def update_opportunity_alert(
+    alert_id: UUID,
+    request: UpdateOpportunityAlertRequest,
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> OpportunityAlert:
+    alert = _store.get_opportunity_alert(alert_id, identity.organization.id)
+    if alert is None:
+        raise HTTPException(status_code=404, detail="Opportunity alert not found")
+    return _store.save_opportunity_alert(
+        alert.model_copy(update={"status": request.status, "updated_at": datetime.now(UTC)})
+    )
+
+
+def _sam_opportunity(opportunity_id: UUID, identity: AuthIdentity) -> Opportunity:
     opportunity = _store.get_opportunity(opportunity_id, identity.organization.id)
     if opportunity is None or opportunity.source != "sam.gov":
         raise HTTPException(status_code=404, detail="SAM.gov opportunity not found")
@@ -848,11 +901,7 @@ def analyze_sam_attachment(
     if snapshot is None:
         raise HTTPException(status_code=404, detail="SAM.gov attachment not found")
     attachment = next(
-        (
-            item
-            for item in _sam_attachment_references(opportunity_id)
-            if item.id == attachment_id
-        ),
+        (item for item in _sam_attachment_references(opportunity_id) if item.id == attachment_id),
         None,
     )
     if attachment is None:
@@ -894,18 +943,17 @@ def create_review(
     identity: Annotated[AuthIdentity, Depends(get_current_identity)],
 ) -> ReviewItem:
     organization_id = identity.organization.id
-    if request.opportunity_id is not None and _store.get_opportunity(
-        request.opportunity_id, organization_id
-    ) is None:
+    if (
+        request.opportunity_id is not None
+        and _store.get_opportunity(request.opportunity_id, organization_id) is None
+    ):
         raise HTTPException(status_code=404, detail="Opportunity not found")
     if any(
         _store.get_document(evidence.document_id, organization_id) is None
         for evidence in request.evidence
     ):
         raise HTTPException(status_code=404, detail="Evidence document not found")
-    item = ReviewItem.model_validate(
-        {**request.model_dump(), "organization_id": organization_id}
-    )
+    item = ReviewItem.model_validate({**request.model_dump(), "organization_id": organization_id})
     return _store.save_review_item(item)
 
 

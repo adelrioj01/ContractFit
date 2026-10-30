@@ -14,6 +14,7 @@ from contractfit.embeddings import EmbeddingHit, EmbeddingTarget, SemanticEmbedd
 from contractfit.pipeline import PipelineItem
 from contractfit.review import ReviewItem, ReviewStatus, review_sort_key
 from contractfit.sam_models import SamIngestionRun, SamOpportunitySnapshot
+from contractfit.watching import OpportunityAlert, OpportunityWatch
 
 
 class ContractFitStore(Protocol):
@@ -60,28 +61,32 @@ class ContractFitStore(Protocol):
     def get_opportunity(
         self, opportunity_id: UUID, organization_id: UUID | None = None
     ) -> Opportunity | None: ...
-    def get_opportunity_by_source(
-        self, source: str, source_id: str
-    ) -> Opportunity | None: ...
-    def list_opportunities(
-        self, organization_id: UUID | None = None
-    ) -> list[Opportunity]: ...
+    def get_opportunity_by_source(self, source: str, source_id: str) -> Opportunity | None: ...
+    def list_opportunities(self, organization_id: UUID | None = None) -> list[Opportunity]: ...
     def save_pipeline_item(self, item: PipelineItem) -> PipelineItem: ...
-    def get_pipeline_item(
-        self, item_id: UUID, organization_id: UUID
-    ) -> PipelineItem | None: ...
+    def get_pipeline_item(self, item_id: UUID, organization_id: UUID) -> PipelineItem | None: ...
     def get_pipeline_item_by_opportunity(
         self, opportunity_id: UUID, organization_id: UUID
     ) -> PipelineItem | None: ...
     def list_pipeline_items(self, organization_id: UUID) -> list[PipelineItem]: ...
+    def save_opportunity_watch(self, watch: OpportunityWatch) -> OpportunityWatch: ...
+    def get_opportunity_watch(
+        self, opportunity_id: UUID, organization_id: UUID
+    ) -> OpportunityWatch | None: ...
+    def list_opportunity_watches(self, organization_id: UUID) -> list[OpportunityWatch]: ...
+    def delete_opportunity_watch(self, opportunity_id: UUID, organization_id: UUID) -> bool: ...
+    def save_opportunity_alert(self, alert: OpportunityAlert) -> OpportunityAlert: ...
+    def get_opportunity_alert(
+        self, alert_id: UUID, organization_id: UUID
+    ) -> OpportunityAlert | None: ...
+    def get_opportunity_alert_by_dedupe_key(
+        self, dedupe_key: str, organization_id: UUID
+    ) -> OpportunityAlert | None: ...
+    def list_opportunity_alerts(self, organization_id: UUID) -> list[OpportunityAlert]: ...
     def save_sam_ingestion_run(self, run: SamIngestionRun) -> SamIngestionRun: ...
     def list_sam_ingestion_runs(self) -> list[SamIngestionRun]: ...
-    def save_sam_snapshot(
-        self, snapshot: SamOpportunitySnapshot
-    ) -> SamOpportunitySnapshot: ...
-    def get_latest_sam_snapshot(
-        self, opportunity_id: UUID
-    ) -> SamOpportunitySnapshot | None: ...
+    def save_sam_snapshot(self, snapshot: SamOpportunitySnapshot) -> SamOpportunitySnapshot: ...
+    def get_latest_sam_snapshot(self, opportunity_id: UUID) -> SamOpportunitySnapshot | None: ...
     def list_sam_snapshots(self, opportunity_id: UUID) -> list[SamOpportunitySnapshot]: ...
     def get_embedding(
         self,
@@ -100,9 +105,7 @@ class ContractFitStore(Protocol):
         organization_id: UUID | None = None,
     ) -> list[EmbeddingHit]: ...
     def save_review_item(self, item: ReviewItem) -> ReviewItem: ...
-    def get_review_item(
-        self, review_id: UUID, organization_id: UUID
-    ) -> ReviewItem | None: ...
+    def get_review_item(self, review_id: UUID, organization_id: UUID) -> ReviewItem | None: ...
     def list_review_items(
         self,
         organization_id: UUID,
@@ -125,6 +128,8 @@ class InMemoryStore:
         self.processing_jobs: dict[UUID, ProcessingJob] = {}
         self.opportunities: dict[UUID, Opportunity] = {}
         self.pipeline_items: dict[UUID, PipelineItem] = {}
+        self.opportunity_watches: dict[UUID, OpportunityWatch] = {}
+        self.opportunity_alerts: dict[UUID, OpportunityAlert] = {}
         self.sam_ingestion_runs: dict[UUID, SamIngestionRun] = {}
         self.sam_snapshots: dict[UUID, SamOpportunitySnapshot] = {}
         self.embeddings: dict[tuple[EmbeddingTarget, UUID, str], SemanticEmbedding] = {}
@@ -139,6 +144,8 @@ class InMemoryStore:
         self.processing_jobs.clear()
         self.opportunities.clear()
         self.pipeline_items.clear()
+        self.opportunity_watches.clear()
+        self.opportunity_alerts.clear()
         self.sam_ingestion_runs.clear()
         self.sam_snapshots.clear()
         self.embeddings.clear()
@@ -172,9 +179,7 @@ class InMemoryStore:
             return None
         return document
 
-    def find_document_by_sha256(
-        self, sha256: str, organization_id: UUID
-    ) -> SourceDocument | None:
+    def find_document_by_sha256(self, sha256: str, organization_id: UUID) -> SourceDocument | None:
         return next(
             (
                 item
@@ -224,11 +229,7 @@ class InMemoryStore:
         ] = document_id
 
     def list_documents(self, organization_id: UUID) -> list[SourceDocument]:
-        return [
-            item
-            for item in self.documents.values()
-            if item.organization_id == organization_id
-        ]
+        return [item for item in self.documents.values() if item.organization_id == organization_id]
 
     def save_document_pages(self, pages: list[DocumentPage]) -> list[DocumentPage]:
         if pages:
@@ -286,9 +287,7 @@ class InMemoryStore:
             return None
         return opportunity
 
-    def get_opportunity_by_source(
-        self, source: str, source_id: str
-    ) -> Opportunity | None:
+    def get_opportunity_by_source(self, source: str, source_id: str) -> Opportunity | None:
         return next(
             (
                 item
@@ -298,9 +297,7 @@ class InMemoryStore:
             None,
         )
 
-    def list_opportunities(
-        self, organization_id: UUID | None = None
-    ) -> list[Opportunity]:
+    def list_opportunities(self, organization_id: UUID | None = None) -> list[Opportunity]:
         opportunities = list(self.opportunities.values())
         if organization_id is None:
             return opportunities
@@ -314,17 +311,13 @@ class InMemoryStore:
     def save_pipeline_item(self, item: PipelineItem) -> PipelineItem:
         if self.get_opportunity(item.opportunity_id, item.organization_id) is None:
             raise ValueError("pipeline opportunity is not visible to the organization")
-        duplicate = self.get_pipeline_item_by_opportunity(
-            item.opportunity_id, item.organization_id
-        )
+        duplicate = self.get_pipeline_item_by_opportunity(item.opportunity_id, item.organization_id)
         if duplicate is not None and duplicate.id != item.id:
             raise ValueError("opportunity is already in the pipeline")
         self.pipeline_items[item.id] = item
         return item
 
-    def get_pipeline_item(
-        self, item_id: UUID, organization_id: UUID
-    ) -> PipelineItem | None:
+    def get_pipeline_item(self, item_id: UUID, organization_id: UUID) -> PipelineItem | None:
         item = self.pipeline_items.get(item_id)
         return item if item is not None and item.organization_id == organization_id else None
 
@@ -335,8 +328,7 @@ class InMemoryStore:
             (
                 item
                 for item in self.pipeline_items.values()
-                if item.organization_id == organization_id
-                and item.opportunity_id == opportunity_id
+                if item.organization_id == organization_id and item.opportunity_id == opportunity_id
             ),
             None,
         )
@@ -352,6 +344,91 @@ class InMemoryStore:
             reverse=True,
         )
 
+    def save_opportunity_watch(self, watch: OpportunityWatch) -> OpportunityWatch:
+        if self.get_opportunity(watch.opportunity_id, watch.organization_id) is None:
+            raise ValueError("watch opportunity is not visible to the organization")
+        existing = self.get_opportunity_watch(watch.opportunity_id, watch.organization_id)
+        if existing is not None and existing.id != watch.id:
+            raise ValueError("opportunity is already watched")
+        self.opportunity_watches[watch.id] = watch
+        return watch
+
+    def get_opportunity_watch(
+        self, opportunity_id: UUID, organization_id: UUID
+    ) -> OpportunityWatch | None:
+        return next(
+            (
+                item
+                for item in self.opportunity_watches.values()
+                if item.opportunity_id == opportunity_id and item.organization_id == organization_id
+            ),
+            None,
+        )
+
+    def list_opportunity_watches(self, organization_id: UUID) -> list[OpportunityWatch]:
+        return sorted(
+            (
+                item
+                for item in self.opportunity_watches.values()
+                if item.organization_id == organization_id
+            ),
+            key=lambda item: (item.created_at, item.id),
+            reverse=True,
+        )
+
+    def delete_opportunity_watch(self, opportunity_id: UUID, organization_id: UUID) -> bool:
+        watch = self.get_opportunity_watch(opportunity_id, organization_id)
+        if watch is None:
+            return False
+        del self.opportunity_watches[watch.id]
+        self.opportunity_alerts = {
+            alert_id: alert
+            for alert_id, alert in self.opportunity_alerts.items()
+            if alert.watch_id != watch.id
+        }
+        return True
+
+    def save_opportunity_alert(self, alert: OpportunityAlert) -> OpportunityAlert:
+        watch = self.opportunity_watches.get(alert.watch_id)
+        if watch is None or watch.organization_id != alert.organization_id:
+            raise ValueError("alert watch is not visible to the organization")
+        duplicate = self.get_opportunity_alert_by_dedupe_key(
+            alert.dedupe_key, alert.organization_id
+        )
+        if duplicate is not None and duplicate.id != alert.id:
+            return duplicate
+        self.opportunity_alerts[alert.id] = alert
+        return alert
+
+    def get_opportunity_alert(
+        self, alert_id: UUID, organization_id: UUID
+    ) -> OpportunityAlert | None:
+        alert = self.opportunity_alerts.get(alert_id)
+        return alert if alert is not None and alert.organization_id == organization_id else None
+
+    def get_opportunity_alert_by_dedupe_key(
+        self, dedupe_key: str, organization_id: UUID
+    ) -> OpportunityAlert | None:
+        return next(
+            (
+                item
+                for item in self.opportunity_alerts.values()
+                if item.dedupe_key == dedupe_key and item.organization_id == organization_id
+            ),
+            None,
+        )
+
+    def list_opportunity_alerts(self, organization_id: UUID) -> list[OpportunityAlert]:
+        return sorted(
+            (
+                item
+                for item in self.opportunity_alerts.values()
+                if item.organization_id == organization_id
+            ),
+            key=lambda item: (item.created_at, item.id),
+            reverse=True,
+        )
+
     def save_sam_ingestion_run(self, run: SamIngestionRun) -> SamIngestionRun:
         self.sam_ingestion_runs[run.id] = run
         return run
@@ -362,27 +439,19 @@ class InMemoryStore:
             key=lambda item: item.started_at,
         )
 
-    def save_sam_snapshot(
-        self, snapshot: SamOpportunitySnapshot
-    ) -> SamOpportunitySnapshot:
+    def save_sam_snapshot(self, snapshot: SamOpportunitySnapshot) -> SamOpportunitySnapshot:
         if snapshot.opportunity_id not in self.opportunities:
             raise ValueError("SAM snapshot opportunity does not exist")
         self.sam_snapshots[snapshot.id] = snapshot
         return snapshot
 
-    def get_latest_sam_snapshot(
-        self, opportunity_id: UUID
-    ) -> SamOpportunitySnapshot | None:
+    def get_latest_sam_snapshot(self, opportunity_id: UUID) -> SamOpportunitySnapshot | None:
         snapshots = self.list_sam_snapshots(opportunity_id)
         return snapshots[-1] if snapshots else None
 
     def list_sam_snapshots(self, opportunity_id: UUID) -> list[SamOpportunitySnapshot]:
         return sorted(
-            (
-                item
-                for item in self.sam_snapshots.values()
-                if item.opportunity_id == opportunity_id
-            ),
+            (item for item in self.sam_snapshots.values() if item.opportunity_id == opportunity_id),
             key=lambda item: item.observed_at,
         )
 
@@ -425,7 +494,10 @@ class InMemoryStore:
             and item.model == model
             and item.organization_id == organization_id
         ]
-        hits = [EmbeddingHit(target_id=item.target_id, score=cosine_score(item.vector)) for item in candidates]
+        hits = [
+            EmbeddingHit(target_id=item.target_id, score=cosine_score(item.vector))
+            for item in candidates
+        ]
         return sorted(hits, key=lambda item: item.score, reverse=True)[:limit]
 
     def save_review_item(self, item: ReviewItem) -> ReviewItem:

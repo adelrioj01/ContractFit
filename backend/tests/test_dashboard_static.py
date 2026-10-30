@@ -24,6 +24,17 @@ def test_dashboard_exposes_persistent_bid_pipeline_controls() -> None:
     assert "preparing_bid:'Preparing bid'" in dashboard
 
 
+def test_dashboard_exposes_opportunity_monitoring_controls() -> None:
+    dashboard = (
+        Path(__file__).parents[1] / "src" / "contractfit" / "static" / "index.html"
+    ).read_text(encoding="utf-8")
+    assert 'href="#alerts"' in dashboard
+    assert 'data-watch-action="${watched?' in dashboard
+    assert "authFetch('/api/watches')" in dashboard
+    assert "authFetch('/api/alerts')" in dashboard
+    assert 'data-alert-status="resolved"' in dashboard
+
+
 def test_dashboard_authenticates_async_processing_polling() -> None:
     dashboard = (
         Path(__file__).parents[1] / "src" / "contractfit" / "static" / "index.html"

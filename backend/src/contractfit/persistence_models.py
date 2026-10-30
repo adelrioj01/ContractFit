@@ -41,9 +41,7 @@ class UserAccountRecord(Base):
 
 class OrganizationMembershipRecord(Base):
     __tablename__ = "organization_memberships"
-    __table_args__ = (
-        UniqueConstraint("user_id", name="uq_organization_memberships_user_id"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", name="uq_organization_memberships_user_id"),)
 
     organization_id: Mapped[UUID] = mapped_column(
         Uuid, ForeignKey("organizations.id", ondelete="CASCADE"), primary_key=True
@@ -94,9 +92,7 @@ class SemanticEmbeddingRecord(Base):
     organization_id: Mapped[UUID | None] = mapped_column(Uuid, index=True)
     model: Mapped[str] = mapped_column(String(255), index=True)
     content_sha256: Mapped[str] = mapped_column(String(64))
-    embedding: Mapped[list[float]] = mapped_column(
-        Vector(768).with_variant(JSON, "sqlite")
-    )
+    embedding: Mapped[list[float]] = mapped_column(Vector(768).with_variant(JSON, "sqlite"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
@@ -211,9 +207,7 @@ class OpportunityRecord(Base):
     requirements: Mapped[list["RequirementRecord"]] = relationship(
         back_populates="opportunity", cascade="all, delete-orphan"
     )
-    review_items: Mapped[list["ReviewItemRecord"]] = relationship(
-        back_populates="opportunity"
-    )
+    review_items: Mapped[list["ReviewItemRecord"]] = relationship(back_populates="opportunity")
     sam_snapshots: Mapped[list["SamOpportunitySnapshotRecord"]] = relationship(
         back_populates="opportunity",
         cascade="all, delete-orphan",
@@ -245,6 +239,56 @@ class PipelineItemRecord(Base):
     next_action: Mapped[str | None] = mapped_column(String(500))
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class OpportunityWatchRecord(Base):
+    __tablename__ = "opportunity_watches"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "opportunity_id",
+            name="uq_opportunity_watches_organization_opportunity",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    organization_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id", ondelete="CASCADE"), index=True
+    )
+    opportunity_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("opportunities.id", ondelete="CASCADE"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class OpportunityAlertRecord(Base):
+    __tablename__ = "opportunity_alerts"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "dedupe_key",
+            name="uq_opportunity_alerts_organization_dedupe",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    organization_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id", ondelete="CASCADE"), index=True
+    )
+    opportunity_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("opportunities.id", ondelete="CASCADE"), index=True
+    )
+    watch_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("opportunity_watches.id", ondelete="CASCADE"), index=True
+    )
+    alert_type: Mapped[str] = mapped_column(String(50), index=True)
+    status: Mapped[str] = mapped_column(String(50), index=True)
+    title: Mapped[str] = mapped_column(String(255))
+    message: Mapped[str] = mapped_column(Text)
+    changed_fields: Mapped[dict[str, object]] = mapped_column(JSON)
+    dedupe_key: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 

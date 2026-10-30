@@ -15,7 +15,7 @@
 <div class="app-shell">
   <aside class="sidebar" aria-label="Primary navigation">
     <div class="brand"><span>ContractFit</span><small>Bid workspace</small></div>
-    <nav class="nav"><a href="#opportunities" aria-current="page" aria-label="Go to opportunities" title="Opportunities"><span class="nav-icon" aria-hidden="true">⌕</span><span>Opportunities</span></a><a href="#profile" aria-label="Go to company profile" title="Company profile"><span class="nav-icon" aria-hidden="true">◇</span><span>Company profile</span></a><a href="#qualification" aria-label="Go to qualification queue" title="Qualification queue"><span class="nav-icon" aria-hidden="true">◫</span><span>Qualification</span></a><a href="#pipeline" aria-label="Go to bid pipeline" title="Bid pipeline"><span class="nav-icon" aria-hidden="true">→</span><span>Pipeline</span></a><a href="#reviews" aria-label="Go to human reviews" title="Human reviews"><span class="nav-icon" aria-hidden="true">✓</span><span>Reviews</span></a><a href="#documents" aria-label="Go to document upload" title="Documents"><span class="nav-icon" aria-hidden="true">▤</span><span>Documents</span></a></nav>
+    <nav class="nav"><a href="#opportunities" aria-current="page" aria-label="Go to opportunities" title="Opportunities"><span class="nav-icon" aria-hidden="true">⌕</span><span>Opportunities</span></a><a href="#profile" aria-label="Go to company profile" title="Company profile"><span class="nav-icon" aria-hidden="true">◇</span><span>Company profile</span></a><a href="#qualification" aria-label="Go to qualification queue" title="Qualification queue"><span class="nav-icon" aria-hidden="true">◫</span><span>Qualification</span></a><a href="#alerts" aria-label="Go to alerts" title="Alerts"><span class="nav-icon" aria-hidden="true">!</span><span>Alerts</span></a><a href="#pipeline" aria-label="Go to bid pipeline" title="Bid pipeline"><span class="nav-icon" aria-hidden="true">→</span><span>Pipeline</span></a><a href="#reviews" aria-label="Go to human reviews" title="Human reviews"><span class="nav-icon" aria-hidden="true">✓</span><span>Reviews</span></a><a href="#documents" aria-label="Go to document upload" title="Documents"><span class="nav-icon" aria-hidden="true">▤</span><span>Documents</span></a></nav>
     <div class="sidebar-footer">Federal opportunity qualification<br>with source-level evidence</div>
   </aside>
   <div class="workspace">
@@ -36,6 +36,7 @@
         <aside id="matches" class="card detail-card" aria-live="polite"><p class="empty">Select an opportunity to review the recommendation.</p></aside>
       </section>
       <section class="task-section" id="pipeline"><div class="section-heading"><div><div class="eyebrow">Bid workflow</div><h2>Opportunity pipeline</h2></div><span class="count" id="pipeline-count"></span></div><div class="card table-card" id="pipeline-list" aria-live="polite"><p class="empty">Add an opportunity to start tracking it.</p></div></section>
+      <section class="task-section" id="alerts"><div class="section-heading"><div><div class="eyebrow">Monitoring</div><h2>Deadline and amendment alerts</h2></div><span class="count" id="alert-count"></span></div><div class="card review-list" id="alert-list" aria-live="polite"><p class="empty">Watch an opportunity to monitor changes.</p></div></section>
       <section class="task-section" id="reviews"><div class="section-heading"><div><div class="eyebrow">Verification queue</div><h2>Needs human review</h2></div></div><div class="task-grid"><div class="card review-list" id="review-list" aria-live="polite"></div><div>
         <section class="card" id="documents" aria-labelledby="upload-heading"><div class="eyebrow">Documents</div><h3 id="upload-heading">Add a solicitation</h3><p class="subtle">Upload a PDF, DOCX, or TXT file to extract its requirements and add it to the qualification queue.</p><form id="upload-form" class="upload-form"><div class="field"><label for="document-file">Solicitation document</label><input id="document-file" name="file" type="file" accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" required aria-describedby="file-help upload-status"><small id="file-help" class="subtle">PDF, DOCX, or TXT</small></div><button type="submit" id="upload-button">Analyze document</button></form><div id="upload-progress-wrap" class="progress-wrap" aria-hidden="true"><progress id="upload-progress" max="100" value="0">0%</progress></div><p id="upload-status" class="upload-state" role="status" aria-live="polite"></p></section>
         <section class="card auth-card" aria-labelledby="auth-heading"><div class="eyebrow">Workspace access</div><h3 id="auth-heading">Reviewer account</h3><p class="subtle">All demo companies and opportunities are synthetic unless explicitly identified as a public SAM.gov record.</p><form id="auth-form" class="auth-form"><div class="field"><label for="demo-company">Synthetic company</label><select id="demo-company"><option value="demo@contractfit.local">Lone Star Facility Services</option><option value="demo+cleaning@contractfit.local">Ozark Civic Cleaning</option><option value="demo+grounds@contractfit.local">Prairie Green Grounds</option><option value="demo+electrical@contractfit.local">Delta Public Power Services</option><option value="demo+plumbing@contractfit.local">GulfLine Plumbing &amp; Backflow</option></select></div><div class="field"><label for="auth-email">Email</label><input id="auth-email" type="email" value="demo@contractfit.local" autocomplete="username" required></div><div class="field"><label for="auth-password">Password</label><input id="auth-password" type="password" value="contractfit-demo-password" autocomplete="current-password" required></div><button type="submit">Sign in</button><button type="button" class="secondary" id="sign-out">Sign out</button></form><p id="auth-status" class="upload-state" role="status" aria-live="polite"></p></section>
@@ -54,7 +55,7 @@ const csv=value=>String(value||'').split(',').map(item=>item.trim()).filter(Bool
 const optionalJson=async(response,empty)=>[404,409].includes(response.status)?empty:json(response);
 let opportunityFilters={};
 let selectedOpportunityId=null;
-let workspaceData={profile:null,opportunities:[],allOpportunities:[],matchesById:{},pipelineByOpportunity:{}};
+let workspaceData={profile:null,opportunities:[],allOpportunities:[],matchesById:{},pipelineByOpportunity:{},watchByOpportunity:{}};
 function renderProfile(profile,completeness){
   const form=document.querySelector('#profile-form');
   const project=profile?.past_performance?.[0]||{};
@@ -87,18 +88,21 @@ function renderOpportunityDetail(opportunityId){
   const gaps=Array.isArray(match?.gaps)?match.gaps:[];
   const gates=Array.isArray(match?.gates)?match.gates:[];
   const pipelineItem=workspaceData.pipelineByOpportunity[opportunity.id];
-  document.querySelector('#matches').innerHTML=`<div class="detail-head"><span class="decision decision-${decision.className}">${decision.label}</span><h3>${esc(opportunity.title)}</h3><div class="subtle">${esc(opportunity.agency||'Agency not provided')}</div></div><div class="detail-body"><div class="detail-grid"><div><div class="detail-label">Fit</div><div class="detail-value">${match?`${finiteNumber(match.fit_score)}/100`:'Not scored'}</div></div><div><div class="detail-label">Deadline</div><div class="detail-value">${esc(opportunity.response_deadline||'Unknown')}</div></div><div><div class="detail-label">Place of performance</div><div class="detail-value">${esc(opportunity.place_of_performance||'Not provided')}</div></div><div><div class="detail-label">Set-aside</div><div class="detail-value">${esc(opportunity.set_aside||'None reported')}</div></div></div><p>${esc(match?.explanation||opportunity.scope||'Detailed qualification is not available yet.')}</p><div class="actions">${pipelineItem?`<a class="button-link" href="#pipeline">In pipeline · ${esc(pipelineStatusLabel(pipelineItem.status))}</a>`:`<button type="button" data-pipeline-add="${esc(opportunity.id)}">Add to pipeline</button>`}</div>${strengths.length?`<div class="detail-section"><h4>Reasons to pursue</h4><ul class="plain-list">${strengths.map(item=>`<li>${esc(item)}</li>`).join('')}</ul></div>`:''}${gaps.length?`<div class="detail-section"><h4>Risks and missing proof</h4><ul class="plain-list">${gaps.map(item=>`<li>${esc(item)}</li>`).join('')}</ul></div>`:''}${gates.length?`<div class="detail-section"><h4>Qualification checks</h4>${gates.map(gate=>`<div class="gate"><span>${esc(gateLabel(gate.name))}<span class="gate-reason">${esc(gate.reason||'No explanation provided.')}</span></span><strong>${esc(statusLabel(gate.status))}</strong></div>`).join('')}</div>`:''}<div class="detail-section"><h4>Source and documents</h4><div class="actions">${url?`<a class="button-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">Open source</a>`:''}${opportunity.source==='sam.gov'?`<button type="button" class="secondary" data-attachment-action="list" data-opportunity-id="${esc(opportunity.id)}">View documents</button>`:''}</div><div id="attachments-${esc(opportunity.id)}" class="upload-state" aria-live="polite"></div></div>${match?`<p class="summary-copy">Scoring method: ${esc(match.scoring_method)}</p>`:''}</div>`;
+  const watched=workspaceData.watchByOpportunity[opportunity.id];
+  document.querySelector('#matches').innerHTML=`<div class="detail-head"><span class="decision decision-${decision.className}">${decision.label}</span><h3>${esc(opportunity.title)}</h3><div class="subtle">${esc(opportunity.agency||'Agency not provided')}</div></div><div class="detail-body"><div class="detail-grid"><div><div class="detail-label">Fit</div><div class="detail-value">${match?`${finiteNumber(match.fit_score)}/100`:'Not scored'}</div></div><div><div class="detail-label">Deadline</div><div class="detail-value">${esc(opportunity.response_deadline||'Unknown')}</div></div><div><div class="detail-label">Place of performance</div><div class="detail-value">${esc(opportunity.place_of_performance||'Not provided')}</div></div><div><div class="detail-label">Set-aside</div><div class="detail-value">${esc(opportunity.set_aside||'None reported')}</div></div></div><p>${esc(match?.explanation||opportunity.scope||'Detailed qualification is not available yet.')}</p><div class="actions">${pipelineItem?`<a class="button-link" href="#pipeline">In pipeline · ${esc(pipelineStatusLabel(pipelineItem.status))}</a>`:`<button type="button" data-pipeline-add="${esc(opportunity.id)}">Add to pipeline</button>`}<button type="button" class="secondary" data-watch-action="${watched?'remove':'add'}" data-opportunity-id="${esc(opportunity.id)}">${watched?'Stop watching':'Watch changes'}</button></div>${strengths.length?`<div class="detail-section"><h4>Reasons to pursue</h4><ul class="plain-list">${strengths.map(item=>`<li>${esc(item)}</li>`).join('')}</ul></div>`:''}${gaps.length?`<div class="detail-section"><h4>Risks and missing proof</h4><ul class="plain-list">${gaps.map(item=>`<li>${esc(item)}</li>`).join('')}</ul></div>`:''}${gates.length?`<div class="detail-section"><h4>Qualification checks</h4>${gates.map(gate=>`<div class="gate"><span>${esc(gateLabel(gate.name))}<span class="gate-reason">${esc(gate.reason||'No explanation provided.')}</span></span><strong>${esc(statusLabel(gate.status))}</strong></div>`).join('')}</div>`:''}<div class="detail-section"><h4>Source and documents</h4><div class="actions">${url?`<a class="button-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">Open source</a>`:''}${opportunity.source==='sam.gov'?`<button type="button" class="secondary" data-attachment-action="list" data-opportunity-id="${esc(opportunity.id)}">View documents</button>`:''}</div><div id="attachments-${esc(opportunity.id)}" class="upload-state" aria-live="polite"></div></div>${match?`<p class="summary-copy">Scoring method: ${esc(match.scoring_method)}</p>`:''}</div>`;
 }
 async function load(){
   try{
-    const[p,completeness,o,allOpportunities,m,e,pipelineItems]=await Promise.all([
+    const[p,completeness,o,allOpportunities,m,e,pipelineItems,watches,alerts]=await Promise.all([
       authFetch('/api/profile').then(response=>optionalJson(response,null)),
       authFetch('/api/profile/completeness').then(json),
       authFetch(opportunityEndpoint()).then(json),
       authFetch('/api/opportunities').then(json),
       authFetch('/api/matches').then(response=>optionalJson(response,[])),
       authFetch('/api/evaluation').then(response=>optionalJson(response,{citation_validity:0})),
-      authFetch('/api/pipeline/items').then(json)
+      authFetch('/api/pipeline/items').then(json),
+      authFetch('/api/watches').then(json),
+      authFetch('/api/alerts').then(json)
     ]);
     let reviews=[];
     if(authToken()){
@@ -111,7 +115,8 @@ async function load(){
     }
     const matchesById=Object.fromEntries(m.map(item=>[item.opportunity_id,item]));
     const pipelineByOpportunity=Object.fromEntries(pipelineItems.map(item=>[item.opportunity_id,item]));
-    workspaceData={profile:p,opportunities:o,allOpportunities,matchesById,pipelineByOpportunity};
+    const watchByOpportunity=Object.fromEntries(watches.map(item=>[item.opportunity_id,item]));
+    workspaceData={profile:p,opportunities:o,allOpportunities,matchesById,pipelineByOpportunity,watchByOpportunity};
     renderProfile(p,completeness);
     if(!o.some(item=>item.id===selectedOpportunityId))selectedOpportunityId=o[0]?.id||null;
     const pursueCount=o.filter(item=>decisionFor(matchesById[item.id]).label==='Pursue').length;
@@ -130,6 +135,13 @@ async function load(){
       const opportunity=allOpportunities.find(candidate=>candidate.id===item.opportunity_id);
       return `<form class="pipeline-form" data-pipeline-item="${esc(item.id)}"><div><strong>${esc(opportunity?.title||'Opportunity unavailable')}</strong><div class="summary-copy">Owner: current reviewer · Updated ${esc(new Date(item.updated_at).toLocaleDateString())}</div></div><select name="status" aria-label="Status for ${esc(opportunity?.title||'opportunity')}">${pipelineStatusOptions(item.status)}</select><input name="next_action" value="${esc(item.next_action||'')}" maxlength="500" placeholder="Next action" aria-label="Next action for ${esc(opportunity?.title||'opportunity')}"><button type="submit">Save</button></form>`;
     }).join(''):'<p class="empty">Add an opportunity to start tracking it.</p>';
+    const unreadAlerts=alerts.filter(item=>item.status==='unread');
+    document.querySelector('#alert-count').textContent=`${unreadAlerts.length} unread · ${watches.length} watched`;
+    document.querySelector('#alert-list').innerHTML=alerts.length?alerts.map(item=>{
+      const opportunity=allOpportunities.find(candidate=>candidate.id===item.opportunity_id);
+      const changes=Object.values(item.changed_fields||{}).filter(value=>value&&typeof value==='object'&&('before' in value||'after' in value));
+      return `<article class="review-row"><span class="badge">${esc(item.status)} · ${esc(item.alert_type.replaceAll('_',' '))}</span><h3>${esc(item.title)}</h3><p>${esc(item.message)}</p>${changes.length?`<ul class="plain-list">${changes.map(change=>`<li><strong>${esc(change.label||'Field')}:</strong> ${esc(change.before??'Not provided')} → ${esc(change.after??'Not provided')}</li>`).join('')}</ul>`:''}<p class="summary-copy">${esc(opportunity?.title||'Opportunity unavailable')} · ${esc(new Date(item.created_at).toLocaleString())}</p><div class="actions">${item.status==='unread'?`<button type="button" data-alert-id="${esc(item.id)}" data-alert-status="read">Mark read</button>`:''}${item.status!=='resolved'?`<button type="button" class="secondary" data-alert-id="${esc(item.id)}" data-alert-status="resolved">Resolve</button>`:''}</div></article>`;
+    }).join(''):'<p class="empty">No alerts yet. Watch an opportunity to monitor deadlines and amendments.</p>';
     document.querySelector('#review-list').innerHTML=reviews.map(review=>`<article class="review-row"><span class="badge">${esc(review.priority)} priority</span><h3>${esc(gateLabel(review.field_name))}</h3><p>${esc(review.extracted_value||'No value extracted')}</p><p class="subtle">${Math.round(finiteNumber(review.confidence)*100)}% confidence · ${esc(review.reason)}</p><p>“${esc(review.evidence?.[0]?.supporting_text||'No evidence excerpt')}”</p><div class="actions"><button type="button" data-review-action="resolve" data-review-id="${esc(review.id)}">Correct value</button><button type="button" class="secondary" data-review-action="dismiss" data-review-id="${esc(review.id)}">Dismiss</button></div></article>`).join('')||(authToken()?'<p class="empty">No pending reviews. Low-confidence fields will appear here.</p>':'<p class="empty">Sign in to view your organization’s review queue.</p>');
   }catch(error){
     document.querySelector('#catalog').innerHTML=`<p class="empty">${esc(error instanceof Error?error.message:'Unable to load opportunities.')}</p>`;
@@ -225,6 +237,29 @@ async function savePipelineItem(event){
     await authFetch(`/api/pipeline/items/${encodeURIComponent(form.dataset.pipelineItem)}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:form.elements.status.value,next_action:form.elements.next_action.value.trim()||null})}).then(json);
     await load();
   }catch(error){alert(error instanceof Error?error.message:'Unable to update the pipeline item.');button.disabled=false}
+}
+
+async function changeWatch(event){
+  const button=event.target.closest('[data-watch-action]');
+  if(!button)return;
+  button.disabled=true;
+  try{
+    const adding=button.dataset.watchAction==='add';
+    const response=await authFetch(`/api/watches/${encodeURIComponent(button.dataset.opportunityId)}`,{method:adding?'POST':'DELETE'});
+    if(!response.ok)throw new Error(`Request failed (${response.status})`);
+    await load();
+    if(adding)location.hash='alerts';
+  }catch(error){alert(error instanceof Error?error.message:'Unable to update monitoring.');button.disabled=false}
+}
+
+async function updateAlert(event){
+  const button=event.target.closest('[data-alert-id]');
+  if(!button)return;
+  button.disabled=true;
+  try{
+    await authFetch(`/api/alerts/${encodeURIComponent(button.dataset.alertId)}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:button.dataset.alertStatus})}).then(json);
+    await load();
+  }catch(error){alert(error instanceof Error?error.message:'Unable to update the alert.');button.disabled=false}
 }
 
 async function handleAttachments(event){
@@ -385,7 +420,9 @@ document.querySelector('#catalog').addEventListener('click',handleAttachments);
 document.querySelector('#catalog').addEventListener('keydown',event=>{if(['Enter',' '].includes(event.key)&&event.target.matches('[data-opportunity-select]')){event.preventDefault();handleAttachments(event)}});
 document.querySelector('#matches').addEventListener('click',handleAttachments);
 document.querySelector('#matches').addEventListener('click',addToPipeline);
+document.querySelector('#matches').addEventListener('click',changeWatch);
 document.querySelector('#pipeline-list').addEventListener('submit',savePipelineItem);
+document.querySelector('#alert-list').addEventListener('click',updateAlert);
 document.querySelector('#filter-form').addEventListener('submit',applyFilters);
 document.querySelector('#clear-filters').addEventListener('click',clearFilters);
 document.querySelector('#auth-form').addEventListener('submit',signIn);

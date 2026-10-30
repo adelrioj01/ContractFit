@@ -74,10 +74,10 @@ with both plain text and image-only PDF inputs.
 - [x] Evidence-grounded explanations.
 
 ## Phase 6: product workflow
-- Ranked opportunity dashboard.
+- [x] Ranked opportunity dashboard.
 - Opportunity details and document viewer.
 - [x] Organization-owned opportunity pipeline with status, owner and next action.
-- Watched opportunities, deadlines and amendments.
+- [x] Watched opportunities, deadline reminders and amendment change alerts.
 - User relevance feedback.
 
 ## Phase 7: evaluation and hardening

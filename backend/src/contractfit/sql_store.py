@@ -33,7 +33,9 @@ from contractfit.persistence_models import (
     CompanyProfileRecord,
     DocumentOriginRecord,
     DocumentPageRecord,
+    OpportunityAlertRecord,
     OpportunityRecord,
+    OpportunityWatchRecord,
     OrganizationMembershipRecord,
     OrganizationRecord,
     PipelineItemRecord,
@@ -54,6 +56,7 @@ from contractfit.sam_models import (
     SamIngestionStatus,
     SamOpportunitySnapshot,
 )
+from contractfit.watching import AlertStatus, AlertType, OpportunityAlert, OpportunityWatch
 
 
 def _ensure_aware(value: datetime) -> datetime:
@@ -69,6 +72,8 @@ class SqlAlchemyStore:
             session.execute(delete(SemanticEmbeddingRecord))
             session.execute(delete(ReviewEvidenceRecord))
             session.execute(delete(ReviewItemRecord))
+            session.execute(delete(OpportunityAlertRecord))
+            session.execute(delete(OpportunityWatchRecord))
             session.execute(delete(PipelineItemRecord))
             session.execute(delete(DocumentOriginRecord))
             session.execute(delete(SamOpportunitySnapshotRecord))
@@ -87,9 +92,7 @@ class SqlAlchemyStore:
         with transaction(self.session_factory) as session:
             statement = select(CompanyProfileRecord)
             if organization_id is not None:
-                statement = statement.where(
-                    CompanyProfileRecord.organization_id == organization_id
-                )
+                statement = statement.where(CompanyProfileRecord.organization_id == organization_id)
             record = session.scalars(statement.limit(1)).first()
             return self._profile_from_record(record) if record else None
 
@@ -113,19 +116,13 @@ class SqlAlchemyStore:
         self, document_id: UUID, organization_id: UUID | None = None
     ) -> SourceDocument | None:
         with transaction(self.session_factory) as session:
-            statement = select(SourceDocumentRecord).where(
-                SourceDocumentRecord.id == document_id
-            )
+            statement = select(SourceDocumentRecord).where(SourceDocumentRecord.id == document_id)
             if organization_id is not None:
-                statement = statement.where(
-                    SourceDocumentRecord.organization_id == organization_id
-                )
+                statement = statement.where(SourceDocumentRecord.organization_id == organization_id)
             record = session.scalars(statement).first()
             return self._document_from_record(record) if record else None
 
-    def find_document_by_sha256(
-        self, sha256: str, organization_id: UUID
-    ) -> SourceDocument | None:
+    def find_document_by_sha256(self, sha256: str, organization_id: UUID) -> SourceDocument | None:
         with transaction(self.session_factory) as session:
             record = session.scalars(
                 select(SourceDocumentRecord).where(
@@ -160,11 +157,9 @@ class SqlAlchemyStore:
             if record is None:
                 record = session.scalars(
                     select(SourceDocumentRecord).where(
-                        SourceDocumentRecord.origin_opportunity_id
-                        == origin_opportunity_id,
+                        SourceDocumentRecord.origin_opportunity_id == origin_opportunity_id,
                         SourceDocumentRecord.origin_url == origin_url,
-                        SourceDocumentRecord.origin_snapshot_sha256
-                        == origin_snapshot_sha256,
+                        SourceDocumentRecord.origin_snapshot_sha256 == origin_snapshot_sha256,
                         SourceDocumentRecord.organization_id == organization_id,
                     )
                 ).first()
@@ -222,9 +217,7 @@ class SqlAlchemyStore:
                 .order_by(DocumentPageRecord.page_number)
             )
             if organization_id is not None:
-                statement = statement.where(
-                    SourceDocumentRecord.organization_id == organization_id
-                )
+                statement = statement.where(SourceDocumentRecord.organization_id == organization_id)
             records = session.scalars(statement).all()
             return [
                 DocumentPage(
@@ -255,9 +248,7 @@ class SqlAlchemyStore:
                 .where(ProcessingJobRecord.id == job_id)
             )
             if organization_id is not None:
-                statement = statement.where(
-                    SourceDocumentRecord.organization_id == organization_id
-                )
+                statement = statement.where(SourceDocumentRecord.organization_id == organization_id)
             record = session.scalars(statement).first()
             return self._processing_job_from_record(record) if record else None
 
@@ -269,9 +260,7 @@ class SqlAlchemyStore:
         with transaction(self.session_factory) as session:
             statement = select(ProcessingJobRecord).join(SourceDocumentRecord)
             if organization_id is not None:
-                statement = statement.where(
-                    SourceDocumentRecord.organization_id == organization_id
-                )
+                statement = statement.where(SourceDocumentRecord.organization_id == organization_id)
             if document_id is not None:
                 statement = statement.where(ProcessingJobRecord.document_id == document_id)
             records = session.scalars(statement.order_by(ProcessingJobRecord.created_at)).all()
@@ -281,9 +270,7 @@ class SqlAlchemyStore:
         with transaction(self.session_factory) as session:
             existing = session.get(OpportunityRecord, opportunity.id)
             payload = opportunity.model_dump(exclude={"requirements"})
-            requirements = [
-                self._requirement_to_record(item) for item in opportunity.requirements
-            ]
+            requirements = [self._requirement_to_record(item) for item in opportunity.requirements]
             if existing is None:
                 session.add(OpportunityRecord(**payload, requirements=requirements))
             else:
@@ -314,9 +301,7 @@ class SqlAlchemyStore:
             record = session.scalars(statement).unique().first()
             return self._opportunity_from_record(record) if record else None
 
-    def get_opportunity_by_source(
-        self, source: str, source_id: str
-    ) -> Opportunity | None:
+    def get_opportunity_by_source(self, source: str, source_id: str) -> Opportunity | None:
         with transaction(self.session_factory) as session:
             record = (
                 session.scalars(
@@ -330,9 +315,7 @@ class SqlAlchemyStore:
             )
             return self._opportunity_from_record(record) if record else None
 
-    def list_opportunities(
-        self, organization_id: UUID | None = None
-    ) -> list[Opportunity]:
+    def list_opportunities(self, organization_id: UUID | None = None) -> list[Opportunity]:
         with transaction(self.session_factory) as session:
             statement = select(OpportunityRecord).outerjoin(
                 SourceDocumentRecord,
@@ -369,9 +352,7 @@ class SqlAlchemyStore:
             raise ValueError("opportunity is already in the pipeline") from exc
         return item
 
-    def get_pipeline_item(
-        self, item_id: UUID, organization_id: UUID
-    ) -> PipelineItem | None:
+    def get_pipeline_item(self, item_id: UUID, organization_id: UUID) -> PipelineItem | None:
         with transaction(self.session_factory) as session:
             record = session.scalars(
                 select(PipelineItemRecord).where(
@@ -405,6 +386,106 @@ class SqlAlchemyStore:
             ).all()
             return [self._pipeline_item_from_record(record) for record in records]
 
+    def save_opportunity_watch(self, watch: OpportunityWatch) -> OpportunityWatch:
+        if self.get_opportunity(watch.opportunity_id, watch.organization_id) is None:
+            raise ValueError("watch opportunity is not visible to the organization")
+        try:
+            with transaction(self.session_factory) as session:
+                session.merge(OpportunityWatchRecord(**watch.model_dump()))
+        except IntegrityError as exc:
+            raise ValueError("opportunity is already watched") from exc
+        return watch
+
+    def get_opportunity_watch(
+        self, opportunity_id: UUID, organization_id: UUID
+    ) -> OpportunityWatch | None:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(OpportunityWatchRecord).where(
+                    OpportunityWatchRecord.opportunity_id == opportunity_id,
+                    OpportunityWatchRecord.organization_id == organization_id,
+                )
+            ).first()
+            return self._opportunity_watch_from_record(record) if record else None
+
+    def list_opportunity_watches(self, organization_id: UUID) -> list[OpportunityWatch]:
+        with transaction(self.session_factory) as session:
+            records = session.scalars(
+                select(OpportunityWatchRecord)
+                .where(OpportunityWatchRecord.organization_id == organization_id)
+                .order_by(
+                    OpportunityWatchRecord.created_at.desc(), OpportunityWatchRecord.id.desc()
+                )
+            ).all()
+            return [self._opportunity_watch_from_record(record) for record in records]
+
+    def delete_opportunity_watch(self, opportunity_id: UUID, organization_id: UUID) -> bool:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(OpportunityWatchRecord).where(
+                    OpportunityWatchRecord.opportunity_id == opportunity_id,
+                    OpportunityWatchRecord.organization_id == organization_id,
+                )
+            ).first()
+            if record is None:
+                return False
+            session.execute(
+                delete(OpportunityAlertRecord).where(OpportunityAlertRecord.watch_id == record.id)
+            )
+            session.delete(record)
+            return True
+
+    def save_opportunity_alert(self, alert: OpportunityAlert) -> OpportunityAlert:
+        try:
+            with transaction(self.session_factory) as session:
+                payload = alert.model_dump()
+                payload["alert_type"] = alert.alert_type.value
+                payload["status"] = alert.status.value
+                session.merge(OpportunityAlertRecord(**payload))
+        except IntegrityError:
+            existing = self.get_opportunity_alert_by_dedupe_key(
+                alert.dedupe_key, alert.organization_id
+            )
+            if existing is not None:
+                return existing
+            raise
+        return alert
+
+    def get_opportunity_alert(
+        self, alert_id: UUID, organization_id: UUID
+    ) -> OpportunityAlert | None:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(OpportunityAlertRecord).where(
+                    OpportunityAlertRecord.id == alert_id,
+                    OpportunityAlertRecord.organization_id == organization_id,
+                )
+            ).first()
+            return self._opportunity_alert_from_record(record) if record else None
+
+    def get_opportunity_alert_by_dedupe_key(
+        self, dedupe_key: str, organization_id: UUID
+    ) -> OpportunityAlert | None:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(OpportunityAlertRecord).where(
+                    OpportunityAlertRecord.dedupe_key == dedupe_key,
+                    OpportunityAlertRecord.organization_id == organization_id,
+                )
+            ).first()
+            return self._opportunity_alert_from_record(record) if record else None
+
+    def list_opportunity_alerts(self, organization_id: UUID) -> list[OpportunityAlert]:
+        with transaction(self.session_factory) as session:
+            records = session.scalars(
+                select(OpportunityAlertRecord)
+                .where(OpportunityAlertRecord.organization_id == organization_id)
+                .order_by(
+                    OpportunityAlertRecord.created_at.desc(), OpportunityAlertRecord.id.desc()
+                )
+            ).all()
+            return [self._opportunity_alert_from_record(record) for record in records]
+
     def save_sam_ingestion_run(self, run: SamIngestionRun) -> SamIngestionRun:
         with transaction(self.session_factory) as session:
             payload = run.model_dump()
@@ -422,18 +503,14 @@ class SqlAlchemyStore:
             ).all()
             return [self._sam_ingestion_run_from_record(record) for record in records]
 
-    def save_sam_snapshot(
-        self, snapshot: SamOpportunitySnapshot
-    ) -> SamOpportunitySnapshot:
+    def save_sam_snapshot(self, snapshot: SamOpportunitySnapshot) -> SamOpportunitySnapshot:
         with transaction(self.session_factory) as session:
             if session.get(OpportunityRecord, snapshot.opportunity_id) is None:
                 raise ValueError("SAM snapshot opportunity does not exist")
             session.add(SamOpportunitySnapshotRecord(**snapshot.model_dump()))
         return snapshot
 
-    def get_latest_sam_snapshot(
-        self, opportunity_id: UUID
-    ) -> SamOpportunitySnapshot | None:
+    def get_latest_sam_snapshot(self, opportunity_id: UUID) -> SamOpportunitySnapshot | None:
         with transaction(self.session_factory) as session:
             record = session.scalars(
                 select(SamOpportunitySnapshotRecord)
@@ -545,9 +622,7 @@ class SqlAlchemyStore:
                     )
                 ).first()
                 if visible_opportunity is None:
-                    raise ValueError(
-                        "review opportunity is not visible to the organization"
-                    )
+                    raise ValueError("review opportunity is not visible to the organization")
 
             evidence_document_ids = {evidence.document_id for evidence in item.evidence}
             owned_document_ids = set(
@@ -559,9 +634,7 @@ class SqlAlchemyStore:
                 ).all()
             )
             if owned_document_ids != evidence_document_ids:
-                raise ValueError(
-                    "review evidence document is not owned by the organization"
-                )
+                raise ValueError("review evidence document is not owned by the organization")
 
             existing = session.get(ReviewItemRecord, item.id)
             if existing:
@@ -583,12 +656,16 @@ class SqlAlchemyStore:
 
     def get_review_item(self, review_id: UUID, organization_id: UUID) -> ReviewItem | None:
         with transaction(self.session_factory) as session:
-            record = session.scalars(
-                select(ReviewItemRecord).where(
-                    ReviewItemRecord.id == review_id,
-                    ReviewItemRecord.organization_id == organization_id,
+            record = (
+                session.scalars(
+                    select(ReviewItemRecord).where(
+                        ReviewItemRecord.id == review_id,
+                        ReviewItemRecord.organization_id == organization_id,
+                    )
                 )
-            ).unique().first()
+                .unique()
+                .first()
+            )
             return self._review_from_record(record) if record else None
 
     def list_review_items(
@@ -614,9 +691,7 @@ class SqlAlchemyStore:
     def register_identity(self, identity: AuthIdentity) -> AuthIdentity:
         with transaction(self.session_factory) as session:
             existing = session.scalars(
-                select(UserAccountRecord).where(
-                    UserAccountRecord.email == identity.user.email
-                )
+                select(UserAccountRecord).where(UserAccountRecord.email == identity.user.email)
             ).first()
             if existing is not None:
                 raise ValueError("email is already registered")
@@ -695,8 +770,7 @@ class SqlAlchemyStore:
             insurance_coverages=record.insurance_coverages,
             contract_preferences=record.contract_preferences,
             past_performance=[
-                PastPerformanceProject.model_validate(item)
-                for item in record.past_performance
+                PastPerformanceProject.model_validate(item) for item in record.past_performance
             ],
             capability_statement=record.capability_statement,
         )
@@ -804,6 +878,32 @@ class SqlAlchemyStore:
         )
 
     @staticmethod
+    def _opportunity_watch_from_record(record: OpportunityWatchRecord) -> OpportunityWatch:
+        return OpportunityWatch(
+            id=record.id,
+            organization_id=record.organization_id,
+            opportunity_id=record.opportunity_id,
+            created_at=_ensure_aware(record.created_at),
+        )
+
+    @staticmethod
+    def _opportunity_alert_from_record(record: OpportunityAlertRecord) -> OpportunityAlert:
+        return OpportunityAlert(
+            id=record.id,
+            organization_id=record.organization_id,
+            opportunity_id=record.opportunity_id,
+            watch_id=record.watch_id,
+            alert_type=AlertType(record.alert_type),
+            status=AlertStatus(record.status),
+            title=record.title,
+            message=record.message,
+            changed_fields=record.changed_fields,
+            dedupe_key=record.dedupe_key,
+            created_at=_ensure_aware(record.created_at),
+            updated_at=_ensure_aware(record.updated_at),
+        )
+
+    @staticmethod
     def _review_from_record(record: ReviewItemRecord) -> ReviewItem:
         def aware(value: datetime | None) -> datetime | None:
             if value is not None and value.tzinfo is None:
@@ -866,9 +966,7 @@ class SqlAlchemyStore:
             updated_count=record.updated_count,
             unchanged_count=record.unchanged_count,
             started_at=_ensure_aware(record.started_at),
-            finished_at=(
-                _ensure_aware(record.finished_at) if record.finished_at else None
-            ),
+            finished_at=(_ensure_aware(record.finished_at) if record.finished_at else None),
             error_message=record.error_message,
         )
 
