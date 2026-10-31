@@ -1,4 +1,5 @@
 import math
+from datetime import UTC, datetime
 from typing import Protocol
 from uuid import UUID
 
@@ -11,6 +12,7 @@ from contractfit.domain import (
     SourceDocument,
 )
 from contractfit.embeddings import EmbeddingHit, EmbeddingTarget, SemanticEmbedding
+from contractfit.notifications import DeliveryStatus, NotificationDelivery, NotificationPreference
 from contractfit.pipeline import PipelineItem
 from contractfit.review import ReviewItem, ReviewStatus, review_sort_key
 from contractfit.sam_models import SamIngestionRun, SamOpportunitySnapshot
@@ -83,6 +85,25 @@ class ContractFitStore(Protocol):
         self, dedupe_key: str, organization_id: UUID
     ) -> OpportunityAlert | None: ...
     def list_opportunity_alerts(self, organization_id: UUID) -> list[OpportunityAlert]: ...
+    def save_notification_preference(
+        self, item: NotificationPreference
+    ) -> NotificationPreference: ...
+    def get_notification_preference(
+        self, organization_id: UUID
+    ) -> NotificationPreference | None: ...
+    def list_notification_preferences(
+        self, enabled_only: bool = False
+    ) -> list[NotificationPreference]: ...
+    def save_notification_delivery(self, item: NotificationDelivery) -> NotificationDelivery: ...
+    def get_notification_delivery_by_alert(
+        self, alert_id: UUID, organization_id: UUID
+    ) -> NotificationDelivery | None: ...
+    def list_notification_deliveries(
+        self, organization_id: UUID | None = None
+    ) -> list[NotificationDelivery]: ...
+    def claim_notification_deliveries(
+        self, max_attempts: int, limit: int = 100
+    ) -> list[NotificationDelivery]: ...
     def save_sam_ingestion_run(self, run: SamIngestionRun) -> SamIngestionRun: ...
     def list_sam_ingestion_runs(self) -> list[SamIngestionRun]: ...
     def save_sam_snapshot(self, snapshot: SamOpportunitySnapshot) -> SamOpportunitySnapshot: ...
@@ -130,6 +151,8 @@ class InMemoryStore:
         self.pipeline_items: dict[UUID, PipelineItem] = {}
         self.opportunity_watches: dict[UUID, OpportunityWatch] = {}
         self.opportunity_alerts: dict[UUID, OpportunityAlert] = {}
+        self.notification_preferences: dict[UUID, NotificationPreference] = {}
+        self.notification_deliveries: dict[UUID, NotificationDelivery] = {}
         self.sam_ingestion_runs: dict[UUID, SamIngestionRun] = {}
         self.sam_snapshots: dict[UUID, SamOpportunitySnapshot] = {}
         self.embeddings: dict[tuple[EmbeddingTarget, UUID, str], SemanticEmbedding] = {}
@@ -146,6 +169,8 @@ class InMemoryStore:
         self.pipeline_items.clear()
         self.opportunity_watches.clear()
         self.opportunity_alerts.clear()
+        self.notification_preferences.clear()
+        self.notification_deliveries.clear()
         self.sam_ingestion_runs.clear()
         self.sam_snapshots.clear()
         self.embeddings.clear()
@@ -428,6 +453,74 @@ class InMemoryStore:
             key=lambda item: (item.created_at, item.id),
             reverse=True,
         )
+
+    def save_notification_preference(self, item: NotificationPreference) -> NotificationPreference:
+        if item.organization_id not in {
+            identity.organization.id for identity in self.identities.values()
+        }:
+            raise ValueError("notification organization does not exist")
+        self.notification_preferences[item.organization_id] = item
+        return item
+
+    def get_notification_preference(self, organization_id: UUID) -> NotificationPreference | None:
+        return self.notification_preferences.get(organization_id)
+
+    def list_notification_preferences(
+        self, enabled_only: bool = False
+    ) -> list[NotificationPreference]:
+        items = list(self.notification_preferences.values())
+        return [item for item in items if item.enabled] if enabled_only else items
+
+    def save_notification_delivery(self, item: NotificationDelivery) -> NotificationDelivery:
+        existing = self.get_notification_delivery_by_alert(item.alert_id, item.organization_id)
+        if existing is not None and existing.id != item.id:
+            return existing
+        self.notification_deliveries[item.id] = item
+        return item
+
+    def get_notification_delivery_by_alert(
+        self, alert_id: UUID, organization_id: UUID
+    ) -> NotificationDelivery | None:
+        return next(
+            (
+                item
+                for item in self.notification_deliveries.values()
+                if item.alert_id == alert_id and item.organization_id == organization_id
+            ),
+            None,
+        )
+
+    def list_notification_deliveries(
+        self, organization_id: UUID | None = None
+    ) -> list[NotificationDelivery]:
+        items = self.notification_deliveries.values()
+        return sorted(
+            (
+                item
+                for item in items
+                if organization_id is None or item.organization_id == organization_id
+            ),
+            key=lambda item: (item.created_at, item.id),
+            reverse=True,
+        )
+
+    def claim_notification_deliveries(
+        self, max_attempts: int, limit: int = 100
+    ) -> list[NotificationDelivery]:
+        now = datetime.now(UTC)
+        candidates = [
+            item
+            for item in reversed(self.list_notification_deliveries())
+            if item.status in {DeliveryStatus.PENDING, DeliveryStatus.FAILED}
+            and item.attempts < max_attempts
+        ][:limit]
+        claimed = [
+            item.model_copy(update={"status": DeliveryStatus.PROCESSING, "updated_at": now})
+            for item in candidates
+        ]
+        for item in claimed:
+            self.notification_deliveries[item.id] = item
+        return claimed
 
     def save_sam_ingestion_run(self, run: SamIngestionRun) -> SamIngestionRun:
         self.sam_ingestion_runs[run.id] = run

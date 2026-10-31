@@ -292,6 +292,43 @@ class OpportunityAlertRecord(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
+class NotificationPreferenceRecord(Base):
+    __tablename__ = "notification_preferences"
+
+    organization_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id", ondelete="CASCADE"), primary_key=True
+    )
+    enabled: Mapped[bool] = mapped_column(default=False)
+    recipient_email: Mapped[str] = mapped_column(String(320))
+    alert_types: Mapped[list[str]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class NotificationDeliveryRecord(Base):
+    __tablename__ = "notification_deliveries"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "alert_id", name="uq_notification_delivery_alert"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    organization_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id", ondelete="CASCADE"), index=True
+    )
+    alert_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("opportunity_alerts.id", ondelete="CASCADE"), index=True
+    )
+    recipient_email: Mapped[str] = mapped_column(String(320))
+    subject: Mapped[str] = mapped_column(String(255))
+    body: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(50), index=True)
+    attempts: Mapped[int] = mapped_column(default=0)
+    error_message: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class SamIngestionRunRecord(Base):
     __tablename__ = "sam_ingestion_runs"
 

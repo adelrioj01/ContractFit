@@ -78,6 +78,7 @@ with both plain text and image-only PDF inputs.
 - Opportunity details and document viewer.
 - [x] Organization-owned opportunity pipeline with status, owner and next action.
 - [x] Watched opportunities, deadline reminders and amendment change alerts.
+- [x] Organization email preferences, auditable outbox and optional SMTP worker.
 - User relevance feedback.
 
 ## Phase 7: evaluation and hardening

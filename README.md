@@ -83,6 +83,7 @@ This repository now contains a working vertical-slice MVP:
 - Hybrid fit scoring with an optional local Ollama model and an offline fallback
 - Cached Ollama embeddings with pgvector cosine search and lexical fallback
 - An explainable ranked-opportunity dashboard at `http://localhost:8000`
+- Organization-owned watch alerts with an auditable email outbox; SMTP sending is opt-in.
 - Organization accounts, Argon2 password hashing, signed access tokens and authenticated reviews
 - A labeled evaluation set measuring extraction recall, citation validity, and eligibility accuracy
 

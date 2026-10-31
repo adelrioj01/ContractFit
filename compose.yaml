@@ -77,6 +77,24 @@ services:
       postgres:
         condition: service_healthy
 
+  notification-worker:
+    profiles: ["notifications"]
+    build:
+      context: ./backend
+    command: ["sh", "-c", "alembic upgrade head && python -m contractfit.notification_worker"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://contractfit:contractfit@postgres:5432/contractfit}
+      STORAGE_BACKEND: postgres
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      NOTIFICATION_POLL_SECONDS: ${NOTIFICATION_POLL_SECONDS:-60}
+      NOTIFICATION_SEND_ENABLED: ${NOTIFICATION_SEND_ENABLED:-false}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      NOTIFICATION_FROM_EMAIL: ${NOTIFICATION_FROM_EMAIL:-notifications@contractfit.local}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   postgres:
     image: pgvector/pgvector:pg17
     environment:

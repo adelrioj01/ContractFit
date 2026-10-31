@@ -33,6 +33,8 @@ def test_dashboard_exposes_opportunity_monitoring_controls() -> None:
     assert "authFetch('/api/watches')" in dashboard
     assert "authFetch('/api/alerts')" in dashboard
     assert 'data-alert-status="resolved"' in dashboard
+    assert 'id="notification-form"' in dashboard
+    assert "authFetch('/api/notification-preferences'" in dashboard
 
 
 def test_dashboard_authenticates_async_processing_polling() -> None:
@@ -40,9 +42,7 @@ def test_dashboard_authenticates_async_processing_polling() -> None:
         Path(__file__).parents[1] / "src" / "contractfit" / "static" / "index.html"
     ).read_text(encoding="utf-8")
 
-    assert (
-        "authFetch(`/api/processing-jobs/${encodeURIComponent(jobId)}`)" in dashboard
-    )
+    assert "authFetch(`/api/processing-jobs/${encodeURIComponent(jobId)}`)" in dashboard
 
 
 def test_dashboard_exposes_structured_company_onboarding() -> None:

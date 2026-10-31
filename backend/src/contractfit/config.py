@@ -25,9 +25,7 @@ class Settings(BaseSettings):
     processing_queue_name: str = "contractfit:document-jobs"
     ocr_backend: Literal["disabled", "tesseract"] = "disabled"
     tesseract_command: str = "tesseract"
-    auth_secret_key: str = Field(
-        default="development-only-change-me-32-bytes", min_length=32
-    )
+    auth_secret_key: str = Field(default="development-only-change-me-32-bytes", min_length=32)
     auth_access_token_minutes: int = Field(default=60, ge=1, le=1440)
     sam_api_key: str | None = None
     sam_sync_enabled: bool = False
@@ -35,6 +33,11 @@ class Settings(BaseSettings):
     sam_lookback_days: int = Field(default=7, ge=1, le=365)
     sam_page_size: int = Field(default=100, ge=1, le=1000)
     sam_request_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
+    notification_poll_seconds: int = Field(default=60, ge=10, le=3600)
+    notification_send_enabled: bool = False
+    smtp_host: str | None = None
+    smtp_port: int = Field(default=1025, ge=1, le=65535)
+    notification_from_email: str = "notifications@contractfit.local"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

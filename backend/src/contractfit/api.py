@@ -54,6 +54,7 @@ from contractfit.extraction import RequirementExtractor
 from contractfit.file_storage import FileStorageError, LocalFileStorage, StoredFile
 from contractfit.job_queue import InMemoryJobQueue, ProcessingJobQueue
 from contractfit.matching import OpportunityMatcher
+from contractfit.notifications import NotificationDelivery, NotificationPreference
 from contractfit.pipeline import PipelineItem, PipelineStatus
 from contractfit.processing import DocumentProcessor
 from contractfit.review import ReviewItem, ReviewReason, ReviewStatus
@@ -73,6 +74,7 @@ from contractfit.sample_data import (
 from contractfit.store import ContractFitStore, InMemoryStore
 from contractfit.watching import (
     AlertStatus,
+    AlertType,
     OpportunityAlert,
     OpportunityWatch,
     refresh_opportunity_alerts,
@@ -173,6 +175,12 @@ class UpdatePipelineItemRequest(BaseModel):
 
 class UpdateOpportunityAlertRequest(BaseModel):
     status: AlertStatus
+
+
+class UpdateNotificationPreferenceRequest(BaseModel):
+    enabled: bool
+    recipient_email: str = Field(min_length=3, max_length=320)
+    alert_types: list[AlertType] = Field(default_factory=lambda: list(AlertType))
 
 
 class RegisterRequest(BaseModel):
@@ -865,6 +873,47 @@ def update_opportunity_alert(
     return _store.save_opportunity_alert(
         alert.model_copy(update={"status": request.status, "updated_at": datetime.now(UTC)})
     )
+
+
+@router.get("/notification-preferences", response_model=NotificationPreference)
+def get_notification_preferences(
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> NotificationPreference:
+    existing = _store.get_notification_preference(identity.organization.id)
+    return existing or NotificationPreference(
+        organization_id=identity.organization.id,
+        recipient_email=identity.user.email,
+    )
+
+
+@router.put("/notification-preferences", response_model=NotificationPreference)
+def put_notification_preferences(
+    request: UpdateNotificationPreferenceRequest,
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> NotificationPreference:
+    if identity.membership.role is not OrganizationRole.ADMIN:
+        raise HTTPException(
+            status_code=403, detail="Only organization admins can manage notifications"
+        )
+    existing = _store.get_notification_preference(identity.organization.id)
+    now = datetime.now(UTC)
+    return _store.save_notification_preference(
+        NotificationPreference(
+            organization_id=identity.organization.id,
+            enabled=request.enabled,
+            recipient_email=request.recipient_email,
+            alert_types=request.alert_types,
+            created_at=existing.created_at if existing else now,
+            updated_at=now,
+        )
+    )
+
+
+@router.get("/notification-deliveries", response_model=list[NotificationDelivery])
+def list_notification_deliveries(
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> list[NotificationDelivery]:
+    return _store.list_notification_deliveries(identity.organization.id)
 
 
 def _sam_opportunity(opportunity_id: UUID, identity: AuthIdentity) -> Opportunity:

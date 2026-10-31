@@ -29,10 +29,13 @@ from contractfit.domain import (
     SourceDocument,
 )
 from contractfit.embeddings import EmbeddingHit, EmbeddingTarget, SemanticEmbedding
+from contractfit.notifications import DeliveryStatus, NotificationDelivery, NotificationPreference
 from contractfit.persistence_models import (
     CompanyProfileRecord,
     DocumentOriginRecord,
     DocumentPageRecord,
+    NotificationDeliveryRecord,
+    NotificationPreferenceRecord,
     OpportunityAlertRecord,
     OpportunityRecord,
     OpportunityWatchRecord,
@@ -72,7 +75,9 @@ class SqlAlchemyStore:
             session.execute(delete(SemanticEmbeddingRecord))
             session.execute(delete(ReviewEvidenceRecord))
             session.execute(delete(ReviewItemRecord))
+            session.execute(delete(NotificationDeliveryRecord))
             session.execute(delete(OpportunityAlertRecord))
+            session.execute(delete(NotificationPreferenceRecord))
             session.execute(delete(OpportunityWatchRecord))
             session.execute(delete(PipelineItemRecord))
             session.execute(delete(DocumentOriginRecord))
@@ -485,6 +490,95 @@ class SqlAlchemyStore:
                 )
             ).all()
             return [self._opportunity_alert_from_record(record) for record in records]
+
+    def save_notification_preference(self, item: NotificationPreference) -> NotificationPreference:
+        with transaction(self.session_factory) as session:
+            payload = item.model_dump()
+            payload["alert_types"] = [value.value for value in item.alert_types]
+            session.merge(NotificationPreferenceRecord(**payload))
+        return item
+
+    def get_notification_preference(self, organization_id: UUID) -> NotificationPreference | None:
+        with transaction(self.session_factory) as session:
+            record = session.get(NotificationPreferenceRecord, organization_id)
+            return self._notification_preference_from_record(record) if record else None
+
+    def list_notification_preferences(
+        self, enabled_only: bool = False
+    ) -> list[NotificationPreference]:
+        with transaction(self.session_factory) as session:
+            statement = select(NotificationPreferenceRecord)
+            if enabled_only:
+                statement = statement.where(NotificationPreferenceRecord.enabled.is_(True))
+            records = session.scalars(
+                statement.order_by(NotificationPreferenceRecord.updated_at)
+            ).all()
+            return [self._notification_preference_from_record(record) for record in records]
+
+    def save_notification_delivery(self, item: NotificationDelivery) -> NotificationDelivery:
+        try:
+            with transaction(self.session_factory) as session:
+                payload = item.model_dump()
+                payload["status"] = item.status.value
+                session.merge(NotificationDeliveryRecord(**payload))
+        except IntegrityError:
+            existing = self.get_notification_delivery_by_alert(item.alert_id, item.organization_id)
+            if existing is not None:
+                return existing
+            raise
+        return item
+
+    def get_notification_delivery_by_alert(
+        self, alert_id: UUID, organization_id: UUID
+    ) -> NotificationDelivery | None:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(NotificationDeliveryRecord).where(
+                    NotificationDeliveryRecord.alert_id == alert_id,
+                    NotificationDeliveryRecord.organization_id == organization_id,
+                )
+            ).first()
+            return self._notification_delivery_from_record(record) if record else None
+
+    def list_notification_deliveries(
+        self, organization_id: UUID | None = None
+    ) -> list[NotificationDelivery]:
+        with transaction(self.session_factory) as session:
+            statement = select(NotificationDeliveryRecord)
+            if organization_id is not None:
+                statement = statement.where(
+                    NotificationDeliveryRecord.organization_id == organization_id
+                )
+            records = session.scalars(
+                statement.order_by(
+                    NotificationDeliveryRecord.created_at.desc(),
+                    NotificationDeliveryRecord.id.desc(),
+                )
+            ).all()
+            return [self._notification_delivery_from_record(record) for record in records]
+
+    def claim_notification_deliveries(
+        self, max_attempts: int, limit: int = 100
+    ) -> list[NotificationDelivery]:
+        with transaction(self.session_factory) as session:
+            records = session.scalars(
+                select(NotificationDeliveryRecord)
+                .where(
+                    NotificationDeliveryRecord.status.in_(
+                        [DeliveryStatus.PENDING.value, DeliveryStatus.FAILED.value]
+                    ),
+                    NotificationDeliveryRecord.attempts < max_attempts,
+                )
+                .order_by(NotificationDeliveryRecord.created_at, NotificationDeliveryRecord.id)
+                .limit(limit)
+                .with_for_update(skip_locked=True)
+            ).all()
+            now = datetime.now(UTC)
+            for record in records:
+                record.status = DeliveryStatus.PROCESSING.value
+                record.updated_at = now
+            session.flush()
+            return [self._notification_delivery_from_record(record) for record in records]
 
     def save_sam_ingestion_run(self, run: SamIngestionRun) -> SamIngestionRun:
         with transaction(self.session_factory) as session:
@@ -901,6 +995,38 @@ class SqlAlchemyStore:
             dedupe_key=record.dedupe_key,
             created_at=_ensure_aware(record.created_at),
             updated_at=_ensure_aware(record.updated_at),
+        )
+
+    @staticmethod
+    def _notification_preference_from_record(
+        record: NotificationPreferenceRecord,
+    ) -> NotificationPreference:
+        return NotificationPreference(
+            organization_id=record.organization_id,
+            enabled=record.enabled,
+            recipient_email=record.recipient_email,
+            alert_types=[AlertType(value) for value in record.alert_types],
+            created_at=_ensure_aware(record.created_at),
+            updated_at=_ensure_aware(record.updated_at),
+        )
+
+    @staticmethod
+    def _notification_delivery_from_record(
+        record: NotificationDeliveryRecord,
+    ) -> NotificationDelivery:
+        return NotificationDelivery(
+            id=record.id,
+            organization_id=record.organization_id,
+            alert_id=record.alert_id,
+            recipient_email=record.recipient_email,
+            subject=record.subject,
+            body=record.body,
+            status=DeliveryStatus(record.status),
+            attempts=record.attempts,
+            error_message=record.error_message,
+            created_at=_ensure_aware(record.created_at),
+            updated_at=_ensure_aware(record.updated_at),
+            sent_at=_ensure_aware(record.sent_at) if record.sent_at else None,
         )
 
     @staticmethod
