@@ -4,6 +4,7 @@ from typing import Protocol
 from uuid import UUID
 
 from contractfit.auth import AuthIdentity
+from contractfit.compliance import ComplianceItem
 from contractfit.domain import (
     CompanyProfile,
     DocumentPage,
@@ -71,6 +72,16 @@ class ContractFitStore(Protocol):
         self, opportunity_id: UUID, organization_id: UUID
     ) -> PipelineItem | None: ...
     def list_pipeline_items(self, organization_id: UUID) -> list[PipelineItem]: ...
+    def save_compliance_item(self, item: ComplianceItem) -> ComplianceItem: ...
+    def get_compliance_item(
+        self, item_id: UUID, organization_id: UUID
+    ) -> ComplianceItem | None: ...
+    def get_compliance_item_by_requirement(
+        self, requirement_id: UUID, organization_id: UUID
+    ) -> ComplianceItem | None: ...
+    def list_compliance_items(
+        self, opportunity_id: UUID, organization_id: UUID
+    ) -> list[ComplianceItem]: ...
     def save_opportunity_watch(self, watch: OpportunityWatch) -> OpportunityWatch: ...
     def get_opportunity_watch(
         self, opportunity_id: UUID, organization_id: UUID
@@ -149,6 +160,7 @@ class InMemoryStore:
         self.processing_jobs: dict[UUID, ProcessingJob] = {}
         self.opportunities: dict[UUID, Opportunity] = {}
         self.pipeline_items: dict[UUID, PipelineItem] = {}
+        self.compliance_items: dict[UUID, ComplianceItem] = {}
         self.opportunity_watches: dict[UUID, OpportunityWatch] = {}
         self.opportunity_alerts: dict[UUID, OpportunityAlert] = {}
         self.notification_preferences: dict[UUID, NotificationPreference] = {}
@@ -167,6 +179,7 @@ class InMemoryStore:
         self.processing_jobs.clear()
         self.opportunities.clear()
         self.pipeline_items.clear()
+        self.compliance_items.clear()
         self.opportunity_watches.clear()
         self.opportunity_alerts.clear()
         self.notification_preferences.clear()
@@ -367,6 +380,57 @@ class InMemoryStore:
             ),
             key=lambda item: (item.updated_at, item.id),
             reverse=True,
+        )
+
+    def save_compliance_item(self, item: ComplianceItem) -> ComplianceItem:
+        opportunity = self.get_opportunity(item.opportunity_id, item.organization_id)
+        if opportunity is None:
+            raise ValueError("compliance opportunity is not visible to the organization")
+        requirement = next(
+            (entry for entry in opportunity.requirements if entry.id == item.requirement_id), None
+        )
+        if requirement is None:
+            raise ValueError("compliance requirement does not belong to the opportunity")
+        duplicate = self.get_compliance_item_by_requirement(
+            item.requirement_id, item.organization_id
+        )
+        if duplicate is not None and duplicate.id != item.id:
+            raise ValueError("requirement is already in the compliance matrix")
+        if item.source_evidence != requirement.evidence:
+            raise ValueError("source evidence cannot differ from the extracted requirement")
+        self.compliance_items[item.id] = item
+        return item
+
+    def get_compliance_item(
+        self, item_id: UUID, organization_id: UUID
+    ) -> ComplianceItem | None:
+        item = self.compliance_items.get(item_id)
+        return item if item is not None and item.organization_id == organization_id else None
+
+    def get_compliance_item_by_requirement(
+        self, requirement_id: UUID, organization_id: UUID
+    ) -> ComplianceItem | None:
+        return next(
+            (
+                item
+                for item in self.compliance_items.values()
+                if item.requirement_id == requirement_id
+                and item.organization_id == organization_id
+            ),
+            None,
+        )
+
+    def list_compliance_items(
+        self, opportunity_id: UUID, organization_id: UUID
+    ) -> list[ComplianceItem]:
+        return sorted(
+            (
+                item
+                for item in self.compliance_items.values()
+                if item.opportunity_id == opportunity_id
+                and item.organization_id == organization_id
+            ),
+            key=lambda item: (item.created_at, str(item.id)),
         )
 
     def save_opportunity_watch(self, watch: OpportunityWatch) -> OpportunityWatch:

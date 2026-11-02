@@ -83,6 +83,7 @@ This repository now contains a working vertical-slice MVP:
 - Hybrid fit scoring with an optional local Ollama model and an offline fallback
 - Cached Ollama embeddings with pgvector cosine search and lexical fallback
 - An explainable ranked-opportunity dashboard at `http://localhost:8000`
+- An organization-owned compliance workspace with editable requirements and page-level citations
 - Organization-owned watch alerts with an auditable email outbox; SMTP sending is opt-in.
 - Organization accounts, Argon2 password hashing, signed access tokens and authenticated reviews
 - A labeled evaluation set measuring extraction recall, citation validity, and eligibility accuracy
@@ -103,6 +104,9 @@ Useful API routes:
 - `POST /api/processing-jobs/{job_id}/retry`
 - `POST /api/opportunities/import-text`
 - `GET /api/opportunities`
+- `GET /api/opportunities/{opportunity_id}`
+- `POST /api/opportunities/{opportunity_id}/compliance/initialize`
+- `PATCH /api/compliance/items/{item_id}`
 - `POST /api/pipeline/items`
 - `GET /api/pipeline/items`
 - `PATCH /api/pipeline/items/{item_id}`
@@ -138,6 +142,19 @@ FEMA notice is the only public real-world acceptance case in the default seed.
 The default `AI_PROVIDER=offline` makes development deterministic. To exercise local-model
 scoring, run Ollama, download the configured model, and set `AI_PROVIDER=ollama` in `.env`.
 The matching service falls back safely if the local model is unavailable.
+
+## Compliance workspace
+
+Open an opportunity from the dashboard after marking its pipeline status `pursue`. ContractFit
+creates one editable compliance row for each already-extracted requirement. Status, requirement
+priority, responsible user, due date, notes, and explicit company evidence are private to the
+authenticated organization. The original document, page or section, and supporting text remain
+fixed so every decision can be traced back to its source.
+
+This increment does not infer company compliance, compare amendment text, or export a matrix.
+Company evidence is user-provided, and opportunities without extracted requirements produce no
+matrix rows. The browser currently captures one evidence description per row; the API model can
+retain multiple structured references for future profile and document pickers.
 
 Vector retrieval is independently controlled by `EMBEDDING_PROVIDER`. To enable local embeddings:
 

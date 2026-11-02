@@ -75,8 +75,11 @@ with both plain text and image-only PDF inputs.
 
 ## Phase 6: product workflow
 - [x] Ranked opportunity dashboard.
-- Opportunity details and document viewer.
+- [x] Opportunity details with page-level source navigation.
 - [x] Organization-owned opportunity pipeline with status, owner and next action.
+- [x] Organization-owned editable compliance matrix with source citations, status, priority,
+  responsible user, due date and explicit business evidence.
+- Amendment comparison and compliance export.
 - [x] Watched opportunities, deadline reminders and amendment change alerts.
 - [x] Organization email preferences, auditable outbox and optional SMTP worker.
 - User relevance feedback.

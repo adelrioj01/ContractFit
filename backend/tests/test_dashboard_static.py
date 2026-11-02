@@ -24,6 +24,20 @@ def test_dashboard_exposes_persistent_bid_pipeline_controls() -> None:
     assert "preparing_bid:'Preparing bid'" in dashboard
 
 
+def test_dashboard_exposes_compliance_workspace_and_source_navigation() -> None:
+    dashboard = (
+        Path(__file__).parents[1] / "src" / "contractfit" / "static" / "index.html"
+    ).read_text(encoding="utf-8")
+
+    assert 'href="#compliance"' in dashboard
+    assert 'data-workspace-open="${esc(opportunity.id)}"' in dashboard
+    assert "compliance/initialize" in dashboard
+    assert "data-compliance-item=" in dashboard
+    assert "data-document-page=" in dashboard
+    assert "evidenceChanged" in dashboard
+    assert "existingEvidence.slice(1)" in dashboard
+
+
 def test_dashboard_exposes_opportunity_monitoring_controls() -> None:
     dashboard = (
         Path(__file__).parents[1] / "src" / "contractfit" / "static" / "index.html"

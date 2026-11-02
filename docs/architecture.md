@@ -24,6 +24,12 @@ content-hashed snapshots only when provider data changes. Failed runs retain san
 and can be retried safely. The human-review boundary models field-level decisions with organization
 ownership, source evidence, deterministic priority and auditable terminal transitions.
 
+The compliance-workspace boundary deterministically projects extracted requirements into
+organization-owned editable rows only after a pursue decision. Source citations are copied for
+audit stability and cannot be changed through the workspace API. Coverage state, assignment,
+deadlines, notes, and user-supplied company evidence remain private workflow data; no model decides
+whether a requirement is covered.
+
 ## Persistence boundary
 
 The API depends on the `ContractFitStore` protocol. `InMemoryStore` keeps unit tests and local
@@ -67,6 +73,7 @@ Dashboard, alerts and feedback
 - Matching: hard gates, weighted scores, semantic similarity and explanations.
 - Evaluations: labeled datasets, regression metrics, cost and latency reporting.
 - Web: onboarding, opportunity review, evidence inspection and feedback.
+- Compliance: private coverage decisions, ownership, deadlines and immutable source traceability.
 
 ## Invariants
 

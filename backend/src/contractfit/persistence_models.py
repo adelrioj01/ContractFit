@@ -242,6 +242,46 @@ class PipelineItemRecord(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
+class ComplianceItemRecord(Base):
+    __tablename__ = "compliance_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "requirement_id",
+            name="uq_compliance_items_organization_requirement",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    organization_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id", ondelete="CASCADE"), index=True
+    )
+    opportunity_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("opportunities.id", ondelete="CASCADE"), index=True
+    )
+    requirement_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("requirements.id", ondelete="CASCADE"), index=True
+    )
+    description: Mapped[str] = mapped_column(Text)
+    category: Mapped[str] = mapped_column(String(255))
+    priority: Mapped[str] = mapped_column(String(50))
+    status: Mapped[str] = mapped_column(String(50), index=True)
+    evidence_document_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("source_documents.id", ondelete="RESTRICT"), index=True
+    )
+    evidence_page: Mapped[int | None]
+    evidence_section: Mapped[str | None] = mapped_column(String(500))
+    evidence_supporting_text: Mapped[str] = mapped_column(Text)
+    business_evidence: Mapped[list[dict[str, object]]] = mapped_column(JSON)
+    owner_user_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("user_accounts.id", ondelete="SET NULL"), index=True
+    )
+    due_date: Mapped[date | None] = mapped_column(Date)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
 class OpportunityWatchRecord(Base):
     __tablename__ = "opportunity_watches"
     __table_args__ = (

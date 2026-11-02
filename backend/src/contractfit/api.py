@@ -21,6 +21,13 @@ from contractfit.auth import (
     hash_password,
     verify_password,
 )
+from contractfit.compliance import (
+    BusinessEvidence,
+    ComplianceItem,
+    ComplianceStatus,
+    RequirementPriority,
+    compliance_item_from_requirement,
+)
 from contractfit.config import get_settings
 from contractfit.domain import (
     CompanyProfile,
@@ -171,6 +178,22 @@ class UpdatePipelineItemRequest(BaseModel):
     status: PipelineStatus | None = None
     next_action: str | None = Field(default=None, max_length=500)
     notes: str | None = Field(default=None, max_length=4000)
+
+
+class UpdateComplianceItemRequest(BaseModel):
+    status: ComplianceStatus | None = None
+    priority: RequirementPriority | None = None
+    business_evidence: list[BusinessEvidence] | None = None
+    owner_user_id: UUID | None = None
+    due_date: date | None = None
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+class OpportunityWorkspace(BaseModel):
+    opportunity: Opportunity
+    pipeline_item: PipelineItem | None
+    compliance_items: list[ComplianceItem]
+    documents: list[SourceDocument]
 
 
 class UpdateOpportunityAlertRequest(BaseModel):
@@ -770,6 +793,108 @@ def list_opportunities(
             item.response_deadline or date.max,
             item.title.casefold(),
         ),
+    )
+
+
+@router.get("/opportunities/{opportunity_id}", response_model=OpportunityWorkspace)
+def get_opportunity_workspace(
+    opportunity_id: UUID,
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> OpportunityWorkspace:
+    organization_id = identity.organization.id
+    opportunity = _store.get_opportunity(opportunity_id, organization_id)
+    if opportunity is None:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+    documents = [
+        document
+        for document in _store.list_documents(organization_id)
+        if document.id == opportunity.document_id
+        or document.origin_opportunity_id == opportunity.id
+    ]
+    return OpportunityWorkspace(
+        opportunity=opportunity,
+        pipeline_item=_store.get_pipeline_item_by_opportunity(
+            opportunity_id, organization_id
+        ),
+        compliance_items=_store.list_compliance_items(opportunity_id, organization_id),
+        documents=documents,
+    )
+
+
+@router.post(
+    "/opportunities/{opportunity_id}/compliance/initialize",
+    response_model=list[ComplianceItem],
+)
+def initialize_compliance_matrix(
+    opportunity_id: UUID,
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> list[ComplianceItem]:
+    organization_id = identity.organization.id
+    opportunity = _store.get_opportunity(opportunity_id, organization_id)
+    if opportunity is None:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+    pipeline_item = _store.get_pipeline_item_by_opportunity(opportunity_id, organization_id)
+    allowed_statuses = {
+        PipelineStatus.PURSUE,
+        PipelineStatus.PREPARING_BID,
+        PipelineStatus.SUBMITTED,
+    }
+    if pipeline_item is None or pipeline_item.status not in allowed_statuses:
+        raise HTTPException(
+            status_code=409,
+            detail="Mark the opportunity as pursue before creating its compliance matrix",
+        )
+    existing = {
+        item.requirement_id: item
+        for item in _store.list_compliance_items(opportunity_id, organization_id)
+    }
+    for requirement in opportunity.requirements:
+        if requirement.id not in existing:
+            item = compliance_item_from_requirement(
+                requirement, organization_id, opportunity_id
+            )
+            try:
+                existing[requirement.id] = _store.save_compliance_item(item)
+            except ValueError as exc:
+                winner = _store.get_compliance_item_by_requirement(
+                    requirement.id, organization_id
+                )
+                if winner is None:
+                    raise HTTPException(status_code=409, detail=str(exc)) from exc
+                existing[requirement.id] = winner
+    return sorted(existing.values(), key=lambda item: (item.created_at, str(item.id)))
+
+
+@router.patch("/compliance/items/{item_id}", response_model=ComplianceItem)
+def update_compliance_item(
+    item_id: UUID,
+    request: UpdateComplianceItemRequest,
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> ComplianceItem:
+    item = _store.get_compliance_item(item_id, identity.organization.id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Compliance item not found")
+    for field_name in ("status", "priority", "business_evidence"):
+        if field_name in request.model_fields_set and getattr(request, field_name) is None:
+            raise HTTPException(status_code=422, detail=f"{field_name} cannot be null")
+    if request.owner_user_id is not None:
+        owner = _store.get_identity_by_user_id(request.owner_user_id)
+        if owner is None or owner.organization.id != identity.organization.id:
+            raise HTTPException(status_code=404, detail="Owner not found")
+    changes = {
+        field_name: getattr(request, field_name)
+        for field_name in request.model_fields_set
+    }
+    resulting_status = changes.get("status", item.status)
+    resulting_evidence = changes.get("business_evidence", item.business_evidence)
+    if resulting_status is ComplianceStatus.COVERED and not resulting_evidence:
+        raise HTTPException(
+            status_code=422,
+            detail="Covered requirements must include business evidence",
+        )
+    changes["updated_at"] = datetime.now(UTC)
+    return _store.save_compliance_item(
+        ComplianceItem.model_validate({**item.model_dump(), **changes})
     )
 
 

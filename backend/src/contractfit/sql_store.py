@@ -14,6 +14,12 @@ from contractfit.auth import (
     OrganizationRole,
     UserAccount,
 )
+from contractfit.compliance import (
+    BusinessEvidence,
+    ComplianceItem,
+    ComplianceStatus,
+    RequirementPriority,
+)
 from contractfit.database import transaction
 from contractfit.domain import (
     CompanyProfile,
@@ -32,6 +38,7 @@ from contractfit.embeddings import EmbeddingHit, EmbeddingTarget, SemanticEmbedd
 from contractfit.notifications import DeliveryStatus, NotificationDelivery, NotificationPreference
 from contractfit.persistence_models import (
     CompanyProfileRecord,
+    ComplianceItemRecord,
     DocumentOriginRecord,
     DocumentPageRecord,
     NotificationDeliveryRecord,
@@ -72,6 +79,7 @@ class SqlAlchemyStore:
 
     def reset(self) -> None:
         with transaction(self.session_factory) as session:
+            session.execute(delete(ComplianceItemRecord))
             session.execute(delete(SemanticEmbeddingRecord))
             session.execute(delete(ReviewEvidenceRecord))
             session.execute(delete(ReviewItemRecord))
@@ -390,6 +398,83 @@ class SqlAlchemyStore:
                 )
             ).all()
             return [self._pipeline_item_from_record(record) for record in records]
+
+    def save_compliance_item(self, item: ComplianceItem) -> ComplianceItem:
+        opportunity = self.get_opportunity(item.opportunity_id, item.organization_id)
+        if opportunity is None:
+            raise ValueError("compliance opportunity is not visible to the organization")
+        requirement = next(
+            (entry for entry in opportunity.requirements if entry.id == item.requirement_id), None
+        )
+        if requirement is None:
+            raise ValueError("compliance requirement does not belong to the opportunity")
+        if item.source_evidence != requirement.evidence:
+            raise ValueError("source evidence cannot differ from the extracted requirement")
+        payload = item.model_dump(exclude={"source_evidence"})
+        payload.update(
+            {
+                "priority": item.priority.value,
+                "status": item.status.value,
+                "business_evidence": [entry.model_dump() for entry in item.business_evidence],
+                "evidence_document_id": item.source_evidence.document_id,
+                "evidence_page": item.source_evidence.page,
+                "evidence_section": item.source_evidence.section,
+                "evidence_supporting_text": item.source_evidence.supporting_text,
+            }
+        )
+        try:
+            with transaction(self.session_factory) as session:
+                duplicate = session.scalars(
+                    select(ComplianceItemRecord).where(
+                        ComplianceItemRecord.organization_id == item.organization_id,
+                        ComplianceItemRecord.requirement_id == item.requirement_id,
+                        ComplianceItemRecord.id != item.id,
+                    )
+                ).first()
+                if duplicate is not None:
+                    raise ValueError("requirement is already in the compliance matrix")
+                session.merge(ComplianceItemRecord(**payload))
+        except IntegrityError as exc:
+            raise ValueError("requirement is already in the compliance matrix") from exc
+        return item
+
+    def get_compliance_item(
+        self, item_id: UUID, organization_id: UUID
+    ) -> ComplianceItem | None:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(ComplianceItemRecord).where(
+                    ComplianceItemRecord.id == item_id,
+                    ComplianceItemRecord.organization_id == organization_id,
+                )
+            ).first()
+            return self._compliance_item_from_record(record) if record else None
+
+    def get_compliance_item_by_requirement(
+        self, requirement_id: UUID, organization_id: UUID
+    ) -> ComplianceItem | None:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(ComplianceItemRecord).where(
+                    ComplianceItemRecord.requirement_id == requirement_id,
+                    ComplianceItemRecord.organization_id == organization_id,
+                )
+            ).first()
+            return self._compliance_item_from_record(record) if record else None
+
+    def list_compliance_items(
+        self, opportunity_id: UUID, organization_id: UUID
+    ) -> list[ComplianceItem]:
+        with transaction(self.session_factory) as session:
+            records = session.scalars(
+                select(ComplianceItemRecord)
+                .where(
+                    ComplianceItemRecord.opportunity_id == opportunity_id,
+                    ComplianceItemRecord.organization_id == organization_id,
+                )
+                .order_by(ComplianceItemRecord.created_at, ComplianceItemRecord.id)
+            ).all()
+            return [self._compliance_item_from_record(record) for record in records]
 
     def save_opportunity_watch(self, watch: OpportunityWatch) -> OpportunityWatch:
         if self.get_opportunity(watch.opportunity_id, watch.organization_id) is None:
@@ -966,6 +1051,31 @@ class SqlAlchemyStore:
             status=PipelineStatus(record.status),
             owner_user_id=record.owner_user_id,
             next_action=record.next_action,
+            notes=record.notes,
+            created_at=_ensure_aware(record.created_at),
+            updated_at=_ensure_aware(record.updated_at),
+        )
+
+    @staticmethod
+    def _compliance_item_from_record(record: ComplianceItemRecord) -> ComplianceItem:
+        return ComplianceItem(
+            id=record.id,
+            organization_id=record.organization_id,
+            opportunity_id=record.opportunity_id,
+            requirement_id=record.requirement_id,
+            description=record.description,
+            category=record.category,
+            priority=RequirementPriority(record.priority),
+            status=ComplianceStatus(record.status),
+            source_evidence=Evidence(
+                document_id=record.evidence_document_id,
+                page=record.evidence_page,
+                section=record.evidence_section,
+                supporting_text=record.evidence_supporting_text,
+            ),
+            business_evidence=[BusinessEvidence.model_validate(item) for item in record.business_evidence],
+            owner_user_id=record.owner_user_id,
+            due_date=record.due_date,
             notes=record.notes,
             created_at=_ensure_aware(record.created_at),
             updated_at=_ensure_aware(record.updated_at),
