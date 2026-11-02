@@ -35,6 +35,19 @@ Scope: Boiler inspection and plant operations.""",
         "expected_categories": ["deadline", "location", "set_aside", "certification", "value"],
         "expected_eligibility": "ineligible",
     },
+    {
+        "name": "conflicting deadline requires review",
+        "solicitation": """Title: Conflicting HVAC Deadline
+Response deadline: 2099-02-15
+Due date: 2099-03-01
+Place of performance: Dallas, Texas
+Set-aside: Small Business
+Required certification: EPA 608
+Estimated value: $200,000
+Scope: Commercial HVAC preventive maintenance and emergency repair.""",
+        "expected_categories": ["deadline", "location", "set_aside", "certification", "value"],
+        "expected_eligibility": "needs_review",
+    },
 ]
 
 

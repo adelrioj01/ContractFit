@@ -75,3 +75,32 @@ def test_sql_store_scopes_profiles_by_organization() -> None:
     assert store.get_profile(SAMPLE_PROFILE.organization_id) == SAMPLE_PROFILE
     assert store.get_profile(other_organization_id) == other_profile
     assert store.get_profile(uuid4()) is None
+
+
+def test_sql_store_round_trip_preserves_conflicting_requirement_evidence() -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    store = SqlAlchemyStore(build_session_factory(engine))
+    document = SourceDocument(
+        organization_id=SAMPLE_PROFILE.organization_id,
+        filename="conflicting.txt",
+        content="Response deadline: 2099-02-15\nDue date: 2099-03-01",
+    )
+    opportunity = RequirementExtractor().extract(document, "conflicting-round-trip")
+
+    store.save_document(document)
+    store.save_opportunity(opportunity)
+
+    saved = store.list_opportunities(SAMPLE_PROFILE.organization_id)[0]
+    deadlines = [item for item in saved.requirements if item.category == "deadline"]
+    assert saved.response_deadline is None
+    assert {item.description for item in deadlines} == {"2099-02-15", "2099-03-01"}
+    assert {item.evidence.supporting_text for item in deadlines} == {
+        "Response deadline: 2099-02-15",
+        "Due date: 2099-03-01",
+    }
+    assert all(item.confidence == 0.5 for item in deadlines)

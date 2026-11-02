@@ -20,6 +20,49 @@ ContractFit helps facilities-service contractors identify government opportuniti
 - Run the relevant tests, linting, and type checks before handoff.
 - Report files changed, verification commands, limitations, and follow-up work.
 
+## Agent orchestration
+- Use a single orchestrator as the owner of scope, context, integration, verification, and final
+  handoff. The orchestrator must inspect repository state and relevant instructions before
+  delegating work.
+- Delegate only work that can be assigned with clear ownership and acceptance criteria. Prefer one
+  worker for small changes; use multiple workers only for independent areas with non-overlapping
+  files or explicitly coordinated interfaces.
+- Give every worker an assigned directory or file set, a concrete deliverable, prohibited changes,
+  and required verification. Use separate Git worktrees for concurrent implementation when
+  workers would otherwise share a working tree.
+- Keep business-rule decisions, schema changes, and final integration with the orchestrator. Do not
+  let agents silently expand scope or introduce a shared-schema change without an architecture
+  decision.
+- Use independent reviewers for evidence correctness, deterministic rules, organization isolation,
+  tests, and regression risk. Reviewers start read-only and must report findings with file and line
+  evidence; they do not approve work with a generic summary.
+- An agent must not be the sole reviewer of its own implementation. Reviewer output is advisory;
+  deterministic checks, labeled evaluations, observed command output, and final diff review are
+  the acceptance authority.
+- Integrate worker changes sequentially. Resolve overlaps deliberately, rerun relevant checks after
+  integration, and have the orchestrator inspect the complete diff before handoff.
+- For extraction or matching work, assign or perform a dedicated evaluation review. New behavior
+  must include labeled positive, negative, missing, ambiguous, and contradictory examples as
+  applicable.
+
+## Orchestrator context lifecycle
+- The orchestrator owns context accounting. At roughly 30 percent context consumption, or sooner
+  when large outputs reduce reliability, replace verbose history with a compact working summary.
+- A compact summary must preserve the objective, user requirements, orchestration decisions,
+  verified facts, repository path, branch, assigned agents and their status, modified and untracked
+  files, observed verification results, blockers, risks, and exact next actions.
+- After compaction, use targeted graph queries, searches, and file reads. Do not repeat completed
+  investigation or reload large outputs unless the compact evidence is insufficient.
+- Create a successor chat only when another compaction would no longer preserve reliable execution
+  or when the current chat is approaching its practical context limit. Before creating it, recheck
+  Git state, agent status, diffs, and verification results, then prepare the same compact handoff.
+- The successor chat must continue from the handoff rather than restart investigation. It must
+  confirm the repository, branch, worktree, outstanding changes, and exact next action before
+  making edits.
+- Chat creation and compaction depend on host support. If the host cannot create a successor chat
+  automatically, prepare the complete handoff and ask the user to open the new chat with that
+  handoff; never claim that a chat was created when it was not.
+
 ## Verification and context discipline
 - Inspect repository state, source files, diffs, and relevant external documentation before making
   technical claims or choosing an implementation.
