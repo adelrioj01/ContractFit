@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, Up
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
 
+from contractfit.amendments import AmendmentComparison, compare_amendments
 from contractfit.auth import (
     AuthIdentity,
     Organization,
@@ -43,6 +44,7 @@ from contractfit.domain import (
     ProcessingJobStatus,
     ProcessingStage,
     ProfileCompleteness,
+    Requirement,
     SourceDocument,
     assess_profile_completeness,
 )
@@ -822,6 +824,63 @@ def get_opportunity_workspace(
         compliance_items=_store.list_compliance_items(opportunity_id, organization_id),
         documents=documents,
     )
+
+
+def _requirements_for_snapshot(
+    opportunity_id: UUID, snapshot_sha256: str, organization_id: UUID
+) -> list[Requirement]:
+    document_ids = {
+        document.id
+        for document in _store.list_documents_by_origin(
+            opportunity_id, snapshot_sha256, organization_id
+        )
+    }
+    requirements = [
+        requirement
+        for opportunity in _store.list_opportunities(organization_id)
+        if opportunity.document_id in document_ids
+        for requirement in opportunity.requirements
+    ]
+    return sorted(requirements, key=lambda item: (item.category, item.description, str(item.id)))
+
+
+@router.get(
+    "/opportunities/{opportunity_id}/amendments/compare",
+    response_model=AmendmentComparison,
+)
+def compare_opportunity_amendments(
+    opportunity_id: UUID,
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+    from_snapshot_id: Annotated[UUID | None, Query()] = None,
+    to_snapshot_id: Annotated[UUID | None, Query()] = None,
+) -> AmendmentComparison:
+    _sam_opportunity(opportunity_id, identity)
+    snapshots = _store.list_sam_snapshots(opportunity_id)
+    if len(snapshots) < 2:
+        raise HTTPException(
+            status_code=409,
+            detail="At least two SAM.gov snapshots are required for comparison",
+        )
+    by_id = {snapshot.id: snapshot for snapshot in snapshots}
+    previous = by_id.get(from_snapshot_id) if from_snapshot_id else snapshots[-2]
+    current = by_id.get(to_snapshot_id) if to_snapshot_id else snapshots[-1]
+    if previous is None or current is None:
+        raise HTTPException(status_code=404, detail="Opportunity snapshot not found")
+    organization_id = identity.organization.id
+    try:
+        return compare_amendments(
+            opportunity_id,
+            previous,
+            current,
+            _requirements_for_snapshot(
+                opportunity_id, previous.content_sha256, organization_id
+            ),
+            _requirements_for_snapshot(
+                opportunity_id, current.content_sha256, organization_id
+            ),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 def _csv_cell(value: object | None) -> str:

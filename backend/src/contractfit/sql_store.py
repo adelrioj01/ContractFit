@@ -208,6 +208,49 @@ class SqlAlchemyStore:
             ).all()
             return [self._document_from_record(record) for record in records]
 
+    def list_documents_by_origin(
+        self,
+        origin_opportunity_id: UUID,
+        origin_snapshot_sha256: str,
+        organization_id: UUID,
+    ) -> list[SourceDocument]:
+        with transaction(self.session_factory) as session:
+            records = session.scalars(
+                select(SourceDocumentRecord)
+                .outerjoin(
+                    DocumentOriginRecord,
+                    DocumentOriginRecord.document_id == SourceDocumentRecord.id,
+                )
+                .where(
+                    SourceDocumentRecord.organization_id == organization_id,
+                    or_(
+                        (
+                            (DocumentOriginRecord.organization_id == organization_id)
+                            & (
+                                DocumentOriginRecord.opportunity_id
+                                == origin_opportunity_id
+                            )
+                            & (
+                                DocumentOriginRecord.snapshot_sha256
+                                == origin_snapshot_sha256
+                            )
+                        ),
+                        (
+                            (
+                                SourceDocumentRecord.origin_opportunity_id
+                                == origin_opportunity_id
+                            )
+                            & (
+                                SourceDocumentRecord.origin_snapshot_sha256
+                                == origin_snapshot_sha256
+                            )
+                        ),
+                    ),
+                )
+                .order_by(SourceDocumentRecord.filename, SourceDocumentRecord.id)
+            ).unique().all()
+            return [self._document_from_record(record) for record in records]
+
     def save_document_pages(self, pages: list[DocumentPage]) -> list[DocumentPage]:
         if not pages:
             return pages

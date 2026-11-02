@@ -47,6 +47,12 @@ class ContractFitStore(Protocol):
         organization_id: UUID,
     ) -> None: ...
     def list_documents(self, organization_id: UUID) -> list[SourceDocument]: ...
+    def list_documents_by_origin(
+        self,
+        origin_opportunity_id: UUID,
+        origin_snapshot_sha256: str,
+        organization_id: UUID,
+    ) -> list[SourceDocument]: ...
     def save_document_pages(self, pages: list[DocumentPage]) -> list[DocumentPage]: ...
     def list_document_pages(
         self, document_id: UUID, organization_id: UUID | None = None
@@ -268,6 +274,32 @@ class InMemoryStore:
 
     def list_documents(self, organization_id: UUID) -> list[SourceDocument]:
         return [item for item in self.documents.values() if item.organization_id == organization_id]
+
+    def list_documents_by_origin(
+        self,
+        origin_opportunity_id: UUID,
+        origin_snapshot_sha256: str,
+        organization_id: UUID,
+    ) -> list[SourceDocument]:
+        document_ids = {
+            document_id
+            for (tenant_id, opportunity_id, _, snapshot_sha256), document_id
+            in self.document_origins.items()
+            if tenant_id == organization_id
+            and opportunity_id == origin_opportunity_id
+            and snapshot_sha256 == origin_snapshot_sha256
+        }
+        document_ids.update(
+            item.id
+            for item in self.documents.values()
+            if item.organization_id == organization_id
+            and item.origin_opportunity_id == origin_opportunity_id
+            and item.origin_snapshot_sha256 == origin_snapshot_sha256
+        )
+        return sorted(
+            (self.documents[item_id] for item_id in document_ids),
+            key=lambda item: (item.filename.casefold(), str(item.id)),
+        )
 
     def save_document_pages(self, pages: list[DocumentPage]) -> list[DocumentPage]:
         if pages:
@@ -609,7 +641,7 @@ class InMemoryStore:
     def list_sam_snapshots(self, opportunity_id: UUID) -> list[SamOpportunitySnapshot]:
         return sorted(
             (item for item in self.sam_snapshots.values() if item.opportunity_id == opportunity_id),
-            key=lambda item: item.observed_at,
+            key=lambda item: (item.observed_at, str(item.id)),
         )
 
     def get_embedding(

@@ -105,6 +105,7 @@ Useful API routes:
 - `POST /api/opportunities/import-text`
 - `GET /api/opportunities`
 - `GET /api/opportunities/{opportunity_id}`
+- `GET /api/opportunities/{opportunity_id}/amendments/compare`
 - `POST /api/opportunities/{opportunity_id}/compliance/initialize`
 - `GET /api/opportunities/{opportunity_id}/compliance/export.csv`
 - `PATCH /api/compliance/items/{item_id}`
@@ -157,10 +158,19 @@ It includes stable opportunity, requirement and document identifiers, the origin
 citation, assignments, dates, notes and structured company evidence. Untrusted cells that could be
 interpreted as spreadsheet formulas are escaped on export.
 
-This increment does not infer company compliance or compare amendment text. Company evidence is
-user-provided, and opportunities without extracted requirements produce no matrix rows. The browser
-currently captures one evidence description per row; the API and CSV retain multiple structured
-references for future profile and document pickers.
+For SAM.gov opportunities with at least two snapshots, the workspace compares the latest pair by
+default. Catalog fields are compared exactly. Requirements from organization-owned analyzed
+attachments are matched conservatively: normalized exact matches are unchanged, and a changed pair
+is reported only when one unmatched old and one unmatched new requirement share a category.
+Ambiguous groups remain separate additions and removals. Both citations are preserved, and the
+comparison never changes compliance decisions automatically. Specific snapshots can be selected
+with `from_snapshot_id` and `to_snapshot_id` query parameters.
+
+This increment does not infer company compliance. Company evidence is user-provided, and
+opportunities without extracted requirements produce no matrix rows. Amendment requirement
+comparison is available only after the organization analyzes attachments for both snapshots. The
+browser currently captures one evidence description per row; the API and CSV retain multiple
+structured references for future profile and document pickers.
 
 Vector retrieval is independently controlled by `EMBEDDING_PROVIDER`. To enable local embeddings:
 

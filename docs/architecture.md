@@ -74,6 +74,8 @@ Dashboard, alerts and feedback
 - Evaluations: labeled datasets, regression metrics, cost and latency reporting.
 - Web: onboarding, opportunity review, evidence inspection and feedback.
 - Compliance: private coverage decisions, ownership, deadlines and immutable source traceability.
+- Amendments: read-only deterministic comparison across immutable provider snapshots and
+  organization-owned analyzed attachments.
 
 ## Invariants
 
@@ -83,3 +85,4 @@ Dashboard, alerts and feedback
 4. Customer data is isolated by organization.
 5. Model prompts and versions are traceable.
 6. Jobs are idempotent and retryable.
+7. Amendment comparison never mutates compliance decisions automatically.

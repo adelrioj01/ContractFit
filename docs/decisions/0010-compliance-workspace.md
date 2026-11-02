@@ -29,7 +29,7 @@ user as an explicit reference; ContractFit does not infer that the company satis
 - Every matrix row remains traceable to the extracted requirement, document, page or section, and
   supporting text.
 - A source document referenced by a compliance item cannot be deleted while the item exists.
-- Amendment comparison and export can use stable opportunity, requirement, document, and snapshot
-  identifiers later, but neither workflow is implemented in this increment.
+- Compliance export and the later read-only amendment comparison use stable opportunity,
+  requirement, document, and snapshot identifiers without mutating existing decisions.
 - This first UI supports one explicit business-evidence description per row; richer selection from
   profiles, past performance, and uploaded company documents remains follow-up work.

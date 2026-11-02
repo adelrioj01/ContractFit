@@ -39,6 +39,10 @@ def test_dashboard_exposes_compliance_workspace_and_source_navigation() -> None:
     assert 'id="export-compliance"' in dashboard
     assert "/compliance/export.csv" in dashboard
     assert "exportComplianceMatrix" in dashboard
+    assert 'id="compare-amendments"' in dashboard
+    assert "/amendments/compare" in dashboard
+    assert "compareAmendments" in dashboard
+    assert "item.change_type!=='unchanged'" in dashboard
 
 
 def test_dashboard_exposes_opportunity_monitoring_controls() -> None:
