@@ -106,6 +106,7 @@ Useful API routes:
 - `GET /api/opportunities`
 - `GET /api/opportunities/{opportunity_id}`
 - `POST /api/opportunities/{opportunity_id}/compliance/initialize`
+- `GET /api/opportunities/{opportunity_id}/compliance/export.csv`
 - `PATCH /api/compliance/items/{item_id}`
 - `POST /api/pipeline/items`
 - `GET /api/pipeline/items`
@@ -151,10 +152,15 @@ priority, responsible user, due date, notes, and explicit company evidence are p
 authenticated organization. The original document, page or section, and supporting text remain
 fixed so every decision can be traced back to its source.
 
-This increment does not infer company compliance, compare amendment text, or export a matrix.
-Company evidence is user-provided, and opportunities without extracted requirements produce no
-matrix rows. The browser currently captures one evidence description per row; the API model can
-retain multiple structured references for future profile and document pickers.
+The workspace can export the authenticated organization's matrix as an Excel-compatible UTF-8 CSV.
+It includes stable opportunity, requirement and document identifiers, the original page-level
+citation, assignments, dates, notes and structured company evidence. Untrusted cells that could be
+interpreted as spreadsheet formulas are escaped on export.
+
+This increment does not infer company compliance or compare amendment text. Company evidence is
+user-provided, and opportunities without extracted requirements produce no matrix rows. The browser
+currently captures one evidence description per row; the API and CSV retain multiple structured
+references for future profile and document pickers.
 
 Vector retrieval is independently controlled by `EMBEDDING_PROVIDER`. To enable local embeddings:
 

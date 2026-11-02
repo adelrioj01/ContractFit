@@ -1,4 +1,7 @@
+import csv
 import hashlib
+import io
+import json
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Annotated, Literal, Protocol
@@ -6,7 +9,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import jwt
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
 
@@ -818,6 +821,102 @@ def get_opportunity_workspace(
         ),
         compliance_items=_store.list_compliance_items(opportunity_id, organization_id),
         documents=documents,
+    )
+
+
+def _csv_cell(value: object | None) -> str:
+    """Render untrusted text without creating spreadsheet formulas."""
+
+    if value is None:
+        return ""
+    rendered = str(value)
+    if rendered.lstrip().startswith(("=", "+", "-", "@")):
+        return f"'{rendered}"
+    return rendered
+
+
+@router.get("/opportunities/{opportunity_id}/compliance/export.csv")
+def export_compliance_matrix(
+    opportunity_id: UUID,
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> Response:
+    organization_id = identity.organization.id
+    opportunity = _store.get_opportunity(opportunity_id, organization_id)
+    if opportunity is None:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+
+    documents = {
+        document.id: document
+        for document in _store.list_documents(organization_id)
+    }
+    output = io.StringIO(newline="")
+    writer = csv.writer(output, quoting=csv.QUOTE_ALL, lineterminator="\r\n")
+    writer.writerow(
+        [
+            "opportunity_id",
+            "opportunity_title",
+            "requirement_id",
+            "requirement",
+            "category",
+            "priority",
+            "status",
+            "owner_user_id",
+            "owner_name",
+            "owner_email",
+            "due_date",
+            "business_evidence_json",
+            "notes",
+            "source_document_id",
+            "source_document_filename",
+            "source_page",
+            "source_section",
+            "source_text",
+        ]
+    )
+    for item in _store.list_compliance_items(opportunity_id, organization_id):
+        owner = (
+            _store.get_identity_by_user_id(item.owner_user_id)
+            if item.owner_user_id is not None
+            else None
+        )
+        if owner is not None and owner.organization.id != organization_id:
+            owner = None
+        document = documents.get(item.source_evidence.document_id)
+        business_evidence = json.dumps(
+            [entry.model_dump(mode="json") for entry in item.business_evidence],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        writer.writerow(
+            [
+                item.opportunity_id,
+                _csv_cell(opportunity.title),
+                item.requirement_id,
+                _csv_cell(item.description),
+                _csv_cell(item.category),
+                item.priority.value,
+                item.status.value,
+                item.owner_user_id,
+                _csv_cell(owner.user.display_name if owner else None),
+                _csv_cell(owner.user.email if owner else None),
+                item.due_date,
+                _csv_cell(business_evidence),
+                _csv_cell(item.notes),
+                item.source_evidence.document_id,
+                _csv_cell(document.filename if document else None),
+                item.source_evidence.page,
+                _csv_cell(item.source_evidence.section),
+                _csv_cell(item.source_evidence.supporting_text),
+            ]
+        )
+    return Response(
+        content="\ufeff" + output.getvalue(),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="compliance-{opportunity_id}.csv"'
+            )
+        },
     )
 
 

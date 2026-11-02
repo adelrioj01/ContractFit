@@ -79,7 +79,8 @@ with both plain text and image-only PDF inputs.
 - [x] Organization-owned opportunity pipeline with status, owner and next action.
 - [x] Organization-owned editable compliance matrix with source citations, status, priority,
   responsible user, due date and explicit business evidence.
-- Amendment comparison and compliance export.
+- Amendment comparison.
+- [x] Organization-scoped compliance CSV export with source citations and business evidence.
 - [x] Watched opportunities, deadline reminders and amendment change alerts.
 - [x] Organization email preferences, auditable outbox and optional SMTP worker.
 - User relevance feedback.

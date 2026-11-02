@@ -36,6 +36,9 @@ def test_dashboard_exposes_compliance_workspace_and_source_navigation() -> None:
     assert "data-document-page=" in dashboard
     assert "evidenceChanged" in dashboard
     assert "existingEvidence.slice(1)" in dashboard
+    assert 'id="export-compliance"' in dashboard
+    assert "/compliance/export.csv" in dashboard
+    assert "exportComplianceMatrix" in dashboard
 
 
 def test_dashboard_exposes_opportunity_monitoring_controls() -> None:

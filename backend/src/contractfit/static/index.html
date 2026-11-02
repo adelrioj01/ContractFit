@@ -36,7 +36,7 @@
         <aside id="matches" class="card detail-card" aria-live="polite"><p class="empty">Select an opportunity to review the recommendation.</p></aside>
       </section>
       <section class="task-section" id="pipeline"><div class="section-heading"><div><div class="eyebrow">Bid workflow</div><h2>Opportunity pipeline</h2></div><span class="count" id="pipeline-count"></span></div><div class="card table-card" id="pipeline-list" aria-live="polite"><p class="empty">Add an opportunity to start tracking it.</p></div></section>
-      <section class="task-section hidden" id="compliance"><div class="section-heading"><div><div class="eyebrow">Compliance workspace</div><h2 id="compliance-title">Opportunity requirements</h2><p class="subtle" id="compliance-summary"></p></div><button type="button" class="secondary" id="close-compliance">Close workspace</button></div><div class="compliance-layout"><div class="card table-card" id="compliance-matrix" aria-live="polite"></div><aside class="card document-viewer" id="document-viewer" aria-live="polite"><p class="empty">Choose a source page from a requirement.</p></aside></div></section>
+      <section class="task-section hidden" id="compliance"><div class="section-heading"><div><div class="eyebrow">Compliance workspace</div><h2 id="compliance-title">Opportunity requirements</h2><p class="subtle" id="compliance-summary"></p></div><div class="actions"><button type="button" class="secondary" id="export-compliance">Export CSV</button><button type="button" class="secondary" id="close-compliance">Close workspace</button></div></div><div class="compliance-layout"><div class="card table-card" id="compliance-matrix" aria-live="polite"></div><aside class="card document-viewer" id="document-viewer" aria-live="polite"><p class="empty">Choose a source page from a requirement.</p></aside></div></section>
       <section class="task-section" id="alerts"><div class="section-heading"><div><div class="eyebrow">Monitoring</div><h2>Deadline and amendment alerts</h2></div><span class="count" id="alert-count"></span></div><form class="card filter-form" id="notification-form"><label class="checkbox-field"><input name="enabled" type="checkbox"> Email notifications</label><div class="field"><label for="notification-email">Recipient</label><input id="notification-email" name="recipient_email" type="email" required></div><button type="submit">Save notifications</button><span class="upload-state" id="notification-status" role="status"></span></form><div class="card review-list" id="alert-list" aria-live="polite"><p class="empty">Watch an opportunity to monitor changes.</p></div></section>
       <section class="task-section" id="reviews"><div class="section-heading"><div><div class="eyebrow">Verification queue</div><h2>Needs human review</h2></div></div><div class="task-grid"><div class="card review-list" id="review-list" aria-live="polite"></div><div>
         <section class="card" id="documents" aria-labelledby="upload-heading"><div class="eyebrow">Documents</div><h3 id="upload-heading">Add a solicitation</h3><p class="subtle">Upload a PDF, DOCX, or TXT file to extract its requirements and add it to the qualification queue.</p><form id="upload-form" class="upload-form"><div class="field"><label for="document-file">Solicitation document</label><input id="document-file" name="file" type="file" accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" required aria-describedby="file-help upload-status"><small id="file-help" class="subtle">PDF, DOCX, or TXT</small></div><button type="submit" id="upload-button">Analyze document</button></form><div id="upload-progress-wrap" class="progress-wrap" aria-hidden="true"><progress id="upload-progress" max="100" value="0">0%</progress></div><p id="upload-status" class="upload-state" role="status" aria-live="polite"></p></section>
@@ -150,6 +150,21 @@ async function showDocumentPage(event){
     const page=pages.find(item=>String(item.page_number)===String(button.dataset.pageNumber));
     viewer.innerHTML=page?`<div class="eyebrow">Original document</div><h3>Page ${esc(page.page_number)}</h3><p class="document-page">${esc(page.text||'No text was extracted from this page.')}</p>`:'<p class="empty">The cited page is not available.</p>';
   }catch(error){viewer.innerHTML=`<p class="empty">${esc(error instanceof Error?error.message:'Unable to load the source page.')}</p>`}
+}
+async function exportComplianceMatrix(){
+  if(!complianceWorkspace)return;
+  const button=document.querySelector('#export-compliance');
+  button.disabled=true;
+  try{
+    const response=await authFetch(`/api/opportunities/${encodeURIComponent(complianceWorkspace.opportunity.id)}/compliance/export.csv`);
+    const blob=await response.blob();
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement('a');
+    link.href=url;
+    link.download=`compliance-${complianceWorkspace.opportunity.id}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }catch(error){alert(error instanceof Error?error.message:'Unable to export the compliance matrix.')}finally{button.disabled=false}
 }
 async function load(){
   try{
@@ -503,6 +518,7 @@ document.querySelector('#matches').addEventListener('click',openComplianceWorksp
 document.querySelector('#pipeline-list').addEventListener('submit',savePipelineItem);
 document.querySelector('#compliance-matrix').addEventListener('submit',saveComplianceItem);
 document.querySelector('#compliance-matrix').addEventListener('click',showDocumentPage);
+document.querySelector('#export-compliance').addEventListener('click',exportComplianceMatrix);
 document.querySelector('#close-compliance').addEventListener('click',()=>{document.querySelector('#compliance').classList.add('hidden');location.hash='opportunities'});
 document.querySelector('#alert-list').addEventListener('click',updateAlert);
 document.querySelector('#notification-form').addEventListener('submit',saveNotificationPreferences);
