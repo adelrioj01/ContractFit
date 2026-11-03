@@ -1,4 +1,4 @@
-# ADR 0010: Organization-owned compliance workspace
+# ADR 0012: Organization-owned compliance workspace
 
 ## Status
 

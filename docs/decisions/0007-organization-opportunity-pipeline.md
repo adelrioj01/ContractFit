@@ -1,4 +1,4 @@
-# Organization-owned opportunity pipeline
+# ADR 0007: Organization-owned opportunity pipeline
 
 ## Status
 

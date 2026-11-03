@@ -67,6 +67,11 @@ uv run ruff check .
 uv run mypy src
 ```
 
+The test suite ignores runtime values from the repository-level Docker `.env` so it behaves the
+same whether invoked from the repository root or `backend/`. Integration runs that intentionally
+need external PostgreSQL, Redis, OCR, or notification settings can set
+`CONTRACTFIT_TEST_USE_EXTERNAL_ENV=1` before starting pytest.
+
 ## Current status
 
 This repository now contains a working vertical-slice MVP:

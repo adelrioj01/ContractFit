@@ -1,4 +1,4 @@
-# Organization-owned email notification outbox
+# ADR 0011: Organization-owned email notification outbox
 
 ## Status
 

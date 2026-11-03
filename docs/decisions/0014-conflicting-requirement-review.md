@@ -1,4 +1,4 @@
-# ADR 0012: Resolve conflicting private-opportunity scalars atomically
+# ADR 0014: Resolve conflicting private-opportunity scalars atomically
 
 ## Status
 

@@ -1,4 +1,4 @@
-# Organization-owned opportunity watches and deterministic alerts
+# ADR 0010: Organization-owned opportunity watches and deterministic alerts
 
 ## Status
 

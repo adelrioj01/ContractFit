@@ -1,4 +1,4 @@
-# ADR 0011: Deterministic amendment comparison
+# ADR 0013: Deterministic amendment comparison
 
 ## Status
 

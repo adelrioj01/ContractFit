@@ -1,4 +1,4 @@
-# ADR 0013: Evaluate structured values, gates, and citation alignment
+# ADR 0015: Evaluate structured values, gates, and citation alignment
 
 ## Status
 
