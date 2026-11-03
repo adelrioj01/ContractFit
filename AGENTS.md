@@ -63,6 +63,18 @@ ContractFit helps facilities-service contractors identify government opportuniti
   automatically, prepare the complete handoff and ask the user to open the new chat with that
   handoff; never claim that a chat was created when it was not.
 
+## OpenCode delegation
+- Prefer `tools/opencode/delegate.ps1` when delegating bounded implementation or test work to the
+  local OpenCode model. The script must run only from a clean orchestrator worktree.
+- Give OpenCode explicit allowed files, prohibited changes, acceptance criteria, and verification
+  commands. Keep architecture decisions, schema changes, integration, and final acceptance with
+  the Codex orchestrator.
+- OpenCode works in its own `opencode/<task>` branch and sibling worktree. It must commit locally,
+  report its commit hash, and never push or merge. The orchestrator reviews the diff and
+  cherry-picks only accepted commits.
+- Use `contractfit-reviewer` for an independent read-only pass. A local-model review is advisory;
+  observed tests, deterministic evaluations, and orchestrator diff review remain authoritative.
+
 ## Verification and context discipline
 - Inspect repository state, source files, diffs, and relevant external documentation before making
   technical claims or choosing an implementation.
