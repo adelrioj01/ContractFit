@@ -2,7 +2,7 @@ EVALUATION_CASES: list[dict[str, object]] = [
     {
         "name": "eligible HVAC opportunity",
         "solicitation": """Title: HVAC Maintenance
-Response deadline: 2027-02-15
+Response deadline: 2099-02-15
 Place of performance: Dallas, Texas
 Set-aside: Small Business
 Required certification: EPA 608
@@ -10,11 +10,66 @@ Estimated value: $200,000
 Scope: Commercial HVAC preventive maintenance and emergency repair.""",
         "expected_categories": ["deadline", "location", "set_aside", "certification", "value"],
         "expected_eligibility": "eligible",
+        "expected_requirements": [
+            {
+                "category": "deadline",
+                "value": "2099-02-15",
+                "supporting_text": "Response deadline: 2099-02-15",
+            },
+            {
+                "category": "location",
+                "value": "Dallas, Texas",
+                "supporting_text": "Place of performance: Dallas, Texas",
+            },
+            {
+                "category": "set_aside",
+                "value": "Small Business",
+                "supporting_text": "Set-aside: Small Business",
+            },
+            {
+                "category": "certification",
+                "value": "EPA 608",
+                "supporting_text": "Required certification: EPA 608",
+            },
+            {
+                "category": "value",
+                "value": "200,000",
+                "supporting_text": "Estimated value: $200,000",
+            },
+        ],
+        "expected_gates": [
+            {
+                "name": "deadline",
+                "status": "eligible",
+                "supporting_text": "Response deadline: 2099-02-15",
+            },
+            {
+                "name": "location",
+                "status": "eligible",
+                "supporting_text": "Place of performance: Dallas, Texas",
+            },
+            {
+                "name": "set_aside",
+                "status": "eligible",
+                "supporting_text": "Set-aside: Small Business",
+            },
+            {
+                "name": "certification",
+                "status": "eligible",
+                "supporting_text": "Required certification: EPA 608",
+            },
+            {
+                "name": "contract_value",
+                "status": "eligible",
+                "supporting_text": "Estimated value: $200,000",
+            },
+            {"name": "past_performance", "status": "eligible", "supporting_text": None},
+        ],
     },
     {
         "name": "unsupported territory",
         "solicitation": """Title: HVAC Maintenance
-Response deadline: 2027-03-20
+Response deadline: 2099-03-20
 Place of performance: Miami, Florida
 Set-aside: Small Business
 Required certification: EPA 608
@@ -22,11 +77,66 @@ Estimated value: $180,000
 Scope: HVAC maintenance for municipal offices.""",
         "expected_categories": ["deadline", "location", "set_aside", "certification", "value"],
         "expected_eligibility": "ineligible",
+        "expected_requirements": [
+            {
+                "category": "deadline",
+                "value": "2099-03-20",
+                "supporting_text": "Response deadline: 2099-03-20",
+            },
+            {
+                "category": "location",
+                "value": "Miami, Florida",
+                "supporting_text": "Place of performance: Miami, Florida",
+            },
+            {
+                "category": "set_aside",
+                "value": "Small Business",
+                "supporting_text": "Set-aside: Small Business",
+            },
+            {
+                "category": "certification",
+                "value": "EPA 608",
+                "supporting_text": "Required certification: EPA 608",
+            },
+            {
+                "category": "value",
+                "value": "180,000",
+                "supporting_text": "Estimated value: $180,000",
+            },
+        ],
+        "expected_gates": [
+            {
+                "name": "deadline",
+                "status": "eligible",
+                "supporting_text": "Response deadline: 2099-03-20",
+            },
+            {
+                "name": "location",
+                "status": "ineligible",
+                "supporting_text": "Place of performance: Miami, Florida",
+            },
+            {
+                "name": "set_aside",
+                "status": "eligible",
+                "supporting_text": "Set-aside: Small Business",
+            },
+            {
+                "name": "certification",
+                "status": "eligible",
+                "supporting_text": "Required certification: EPA 608",
+            },
+            {
+                "name": "contract_value",
+                "status": "eligible",
+                "supporting_text": "Estimated value: $180,000",
+            },
+            {"name": "past_performance", "status": "eligible", "supporting_text": None},
+        ],
     },
     {
         "name": "missing certification",
         "solicitation": """Title: Boiler Operations
-Response deadline: 2027-04-10
+Response deadline: 2099-04-10
 Place of performance: Austin, Texas
 Set-aside: Small Business
 Required certification: ASME Boiler Operator
@@ -34,6 +144,61 @@ Estimated value: $150,000
 Scope: Boiler inspection and plant operations.""",
         "expected_categories": ["deadline", "location", "set_aside", "certification", "value"],
         "expected_eligibility": "ineligible",
+        "expected_requirements": [
+            {
+                "category": "deadline",
+                "value": "2099-04-10",
+                "supporting_text": "Response deadline: 2099-04-10",
+            },
+            {
+                "category": "location",
+                "value": "Austin, Texas",
+                "supporting_text": "Place of performance: Austin, Texas",
+            },
+            {
+                "category": "set_aside",
+                "value": "Small Business",
+                "supporting_text": "Set-aside: Small Business",
+            },
+            {
+                "category": "certification",
+                "value": "ASME Boiler Operator",
+                "supporting_text": "Required certification: ASME Boiler Operator",
+            },
+            {
+                "category": "value",
+                "value": "150,000",
+                "supporting_text": "Estimated value: $150,000",
+            },
+        ],
+        "expected_gates": [
+            {
+                "name": "deadline",
+                "status": "eligible",
+                "supporting_text": "Response deadline: 2099-04-10",
+            },
+            {
+                "name": "location",
+                "status": "eligible",
+                "supporting_text": "Place of performance: Austin, Texas",
+            },
+            {
+                "name": "set_aside",
+                "status": "eligible",
+                "supporting_text": "Set-aside: Small Business",
+            },
+            {
+                "name": "certification",
+                "status": "ineligible",
+                "supporting_text": "Required certification: ASME Boiler Operator",
+            },
+            {
+                "name": "contract_value",
+                "status": "eligible",
+                "supporting_text": "Estimated value: $150,000",
+            },
+            {"name": "past_performance", "status": "eligible", "supporting_text": None},
+        ],
     },
     {
         "name": "conflicting deadline requires review",
@@ -47,6 +212,62 @@ Estimated value: $200,000
 Scope: Commercial HVAC preventive maintenance and emergency repair.""",
         "expected_categories": ["deadline", "location", "set_aside", "certification", "value"],
         "expected_eligibility": "needs_review",
+        "expected_requirements": [
+            {
+                "category": "deadline",
+                "value": "2099-02-15",
+                "supporting_text": "Response deadline: 2099-02-15",
+            },
+            {
+                "category": "deadline",
+                "value": "2099-03-01",
+                "supporting_text": "Due date: 2099-03-01",
+            },
+            {
+                "category": "location",
+                "value": "Dallas, Texas",
+                "supporting_text": "Place of performance: Dallas, Texas",
+            },
+            {
+                "category": "set_aside",
+                "value": "Small Business",
+                "supporting_text": "Set-aside: Small Business",
+            },
+            {
+                "category": "certification",
+                "value": "EPA 608",
+                "supporting_text": "Required certification: EPA 608",
+            },
+            {
+                "category": "value",
+                "value": "200,000",
+                "supporting_text": "Estimated value: $200,000",
+            },
+        ],
+        "expected_gates": [
+            {"name": "deadline", "status": "needs_review", "supporting_text": None},
+            {
+                "name": "location",
+                "status": "eligible",
+                "supporting_text": "Place of performance: Dallas, Texas",
+            },
+            {
+                "name": "set_aside",
+                "status": "eligible",
+                "supporting_text": "Set-aside: Small Business",
+            },
+            {
+                "name": "certification",
+                "status": "eligible",
+                "supporting_text": "Required certification: EPA 608",
+            },
+            {
+                "name": "contract_value",
+                "status": "eligible",
+                "supporting_text": "Estimated value: $200,000",
+            },
+            {"name": "past_performance", "status": "eligible", "supporting_text": None},
+        ],
     },
 ]
 
@@ -57,7 +278,10 @@ RANKING_EVALUATION_CASES: list[dict[str, object]] = [
         "query": "We maintain commercial climate-control systems and provide emergency cooling service.",
         "candidates": [
             {"id": "janitorial", "text": "Nightly office cleaning and consumable restocking."},
-            {"id": "hvac", "text": "Preventive heating, ventilation and air-conditioning equipment service."},
+            {
+                "id": "hvac",
+                "text": "Preventive heating, ventilation and air-conditioning equipment service.",
+            },
             {"id": "roofing", "text": "Commercial roof membrane replacement and leak repair."},
             {"id": "security", "text": "Armed guard and access-control staffing."},
         ],
@@ -69,7 +293,10 @@ RANKING_EVALUATION_CASES: list[dict[str, object]] = [
         "candidates": [
             {"id": "landscape", "text": "Grounds mowing, pruning and irrigation maintenance."},
             {"id": "electrical", "text": "Switchgear inspection and emergency electrical repair."},
-            {"id": "health-cleaning", "text": "Medical-facility sanitation and pathogen disinfection."},
+            {
+                "id": "health-cleaning",
+                "text": "Medical-facility sanitation and pathogen disinfection.",
+            },
             {"id": "paving", "text": "Parking-lot asphalt resurfacing and striping."},
         ],
         "relevant_ids": ["health-cleaning"],
@@ -79,7 +306,10 @@ RANKING_EVALUATION_CASES: list[dict[str, object]] = [
         "query": "We provide turf care, tree trimming and irrigation repair for public campuses.",
         "candidates": [
             {"id": "plumbing", "text": "Domestic water piping and restroom fixture replacement."},
-            {"id": "grounds", "text": "Landscape upkeep, arborist work and sprinkler-system service."},
+            {
+                "id": "grounds",
+                "text": "Landscape upkeep, arborist work and sprinkler-system service.",
+            },
             {"id": "janitorial", "text": "Day porter and custodial services for public buildings."},
             {"id": "hvac", "text": "Chiller and air-handler preventive maintenance."},
         ],
@@ -100,7 +330,10 @@ RANKING_EVALUATION_CASES: list[dict[str, object]] = [
         "name": "electrical distribution maintenance",
         "query": "Our electricians service switchgear, panels and emergency power systems.",
         "candidates": [
-            {"id": "generator", "text": "Generator testing, breaker inspection and power-distribution repair."},
+            {
+                "id": "generator",
+                "text": "Generator testing, breaker inspection and power-distribution repair.",
+            },
             {"id": "roof", "text": "Roof inspection and storm-damage repair."},
             {"id": "cleaning", "text": "Industrial floor cleaning and pressure washing."},
             {"id": "landscape", "text": "Seasonal grounds and snow-removal services."},
@@ -112,7 +345,10 @@ RANKING_EVALUATION_CASES: list[dict[str, object]] = [
         "query": "Commercial plumbing, drain clearing and backflow-device maintenance.",
         "candidates": [
             {"id": "fire", "text": "Fire-alarm testing and notification appliance inspection."},
-            {"id": "water", "text": "Pipe repair, sewer stoppage response and cross-connection testing."},
+            {
+                "id": "water",
+                "text": "Pipe repair, sewer stoppage response and cross-connection testing.",
+            },
             {"id": "elevator", "text": "Vertical-transport preventive service and callout repair."},
             {"id": "security", "text": "Badge-reader and intrusion-alarm installation."},
         ],
@@ -123,7 +359,10 @@ RANKING_EVALUATION_CASES: list[dict[str, object]] = [
         "query": "We operate public buildings with multi-trade preventive maintenance and work-order dispatch.",
         "candidates": [
             {"id": "fleet", "text": "Vehicle fleet maintenance and parts management."},
-            {"id": "facilities", "text": "Integrated building operations, asset upkeep and service-desk coordination."},
+            {
+                "id": "facilities",
+                "text": "Integrated building operations, asset upkeep and service-desk coordination.",
+            },
             {"id": "catering", "text": "Institutional food preparation and meal delivery."},
             {"id": "records", "text": "Document scanning and records digitization."},
         ],
@@ -134,7 +373,10 @@ RANKING_EVALUATION_CASES: list[dict[str, object]] = [
         "query": "Certified operators inspect boilers, burners and steam-plant controls.",
         "candidates": [
             {"id": "solar", "text": "Photovoltaic array inspection and inverter replacement."},
-            {"id": "steam", "text": "Heating-plant operation, combustion tuning and pressure-vessel service."},
+            {
+                "id": "steam",
+                "text": "Heating-plant operation, combustion tuning and pressure-vessel service.",
+            },
             {"id": "janitorial", "text": "Restroom sanitation and common-area cleaning."},
             {"id": "grounds", "text": "Athletic-field and landscape maintenance."},
         ],
