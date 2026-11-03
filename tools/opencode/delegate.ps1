@@ -9,6 +9,8 @@ param(
 
     [string]$Model = 'ollama/qwen2.5-coder:7b',
 
+    [switch]$AllowExternalProvider,
+
     [switch]$NoRun
 )
 
@@ -17,6 +19,10 @@ $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $repositoryName = Split-Path $repositoryRoot -Leaf
 $worktreePath = Join-Path (Split-Path $repositoryRoot -Parent) "$repositoryName-opencode-$Name"
 $branchName = "opencode/$Name"
+
+if ($Model.StartsWith('opencode/') -and -not $AllowExternalProvider) {
+    throw 'OpenCode-hosted models may receive repository content. Pass -AllowExternalProvider only after explicit approval.'
+}
 
 $status = git -C $repositoryRoot status --porcelain
 if ($LASTEXITCODE -ne 0) {

@@ -66,6 +66,11 @@ ContractFit helps facilities-service contractors identify government opportuniti
 ## OpenCode delegation
 - Prefer `tools/opencode/delegate.ps1` when delegating bounded implementation or test work to the
   local OpenCode model. The script must run only from a clean orchestrator worktree.
+- Classify work with `docs/agent-delegation.md` before delegation. Delegate green tasks, split and
+  constrain amber tasks, and keep red tasks with the Codex orchestrator.
+- Local Ollama delegation may proceed without external disclosure. Any `opencode/*` hosted model
+  requires explicit approval for the specific task before passing `-AllowExternalProvider`; never
+  send secrets, customer data, private capability statements, or production traces.
 - Give OpenCode explicit allowed files, prohibited changes, acceptance criteria, and verification
   commands. Keep architecture decisions, schema changes, integration, and final acceptance with
   the Codex orchestrator.
