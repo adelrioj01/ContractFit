@@ -13,7 +13,15 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, Up
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
 
-from contractfit.amendments import AmendmentComparison, compare_amendments
+from contractfit.amendments import (
+    AmendmentAcknowledgement,
+    AmendmentChangeType,
+    AmendmentComparison,
+    AmendmentSelection,
+    RequirementChange,
+    RequirementVersion,
+    compare_amendments,
+)
 from contractfit.auth import (
     AuthIdentity,
     Organization,
@@ -192,6 +200,17 @@ class UpdateComplianceItemRequest(BaseModel):
     owner_user_id: UUID | None = None
     due_date: date | None = None
     notes: str | None = Field(default=None, max_length=4000)
+
+
+class AcknowledgeAmendmentRequest(BaseModel):
+    previous_snapshot_id: UUID
+    current_snapshot_id: UUID
+    selections: list[AmendmentSelection] = Field(min_length=1)
+
+
+class AcknowledgeAmendmentResponse(BaseModel):
+    acknowledgement: AmendmentAcknowledgement
+    compliance_items: list[ComplianceItem]
 
 
 class OpportunityWorkspace(BaseModel):
@@ -818,9 +837,7 @@ def get_opportunity_workspace(
     ]
     return OpportunityWorkspace(
         opportunity=opportunity,
-        pipeline_item=_store.get_pipeline_item_by_opportunity(
-            opportunity_id, organization_id
-        ),
+        pipeline_item=_store.get_pipeline_item_by_opportunity(opportunity_id, organization_id),
         compliance_items=_store.list_compliance_items(opportunity_id, organization_id),
         documents=documents,
     )
@@ -872,15 +889,150 @@ def compare_opportunity_amendments(
             opportunity_id,
             previous,
             current,
-            _requirements_for_snapshot(
-                opportunity_id, previous.content_sha256, organization_id
-            ),
-            _requirements_for_snapshot(
-                opportunity_id, current.content_sha256, organization_id
-            ),
+            _requirements_for_snapshot(opportunity_id, previous.content_sha256, organization_id),
+            _requirements_for_snapshot(opportunity_id, current.content_sha256, organization_id),
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def _selection_key(
+    change_type: AmendmentChangeType,
+    previous: RequirementVersion | None,
+    current: RequirementVersion | None,
+) -> tuple[AmendmentChangeType, UUID | None, UUID | None]:
+    return (
+        change_type,
+        previous.id if previous is not None else None,
+        current.id if current is not None else None,
+    )
+
+
+def _selected_compliance_items(
+    comparison: AmendmentComparison,
+    selections: list[AmendmentSelection],
+    organization_id: UUID,
+) -> tuple[list[UUID], list[ComplianceItem]]:
+    material = {
+        _selection_key(change.change_type, change.previous, change.current): change
+        for change in comparison.requirement_changes
+        if change.change_type is not AmendmentChangeType.UNCHANGED
+    }
+    requested = [
+        (
+            item.change_type,
+            item.previous_requirement_id,
+            item.current_requirement_id,
+        )
+        for item in selections
+    ]
+    if len(set(requested)) != len(requested):
+        raise ValueError("amendment selections must be unique")
+    if any(item not in material for item in requested):
+        raise ValueError("selected requirement change is not in this comparison")
+
+    superseded_requirement_ids: set[UUID] = set()
+    new_items: dict[UUID, ComplianceItem] = {}
+    for key in requested:
+        change: RequirementChange = material[key]
+        if change.previous is not None:
+            superseded_requirement_ids.add(change.previous.id)
+        if change.current is not None:
+            current_item = _store.get_compliance_item_by_requirement(
+                change.current.id, organization_id
+            )
+            if current_item is None:
+                version = change.current
+                current_item = ComplianceItem(
+                    organization_id=organization_id,
+                    opportunity_id=comparison.opportunity_id,
+                    requirement_id=version.id,
+                    description=version.description,
+                    category=version.category,
+                    priority=(
+                        RequirementPriority.MANDATORY
+                        if version.mandatory
+                        else RequirementPriority.RECOMMENDED
+                    ),
+                    source_evidence=version.evidence,
+                )
+                new_items[current_item.id] = current_item
+    return sorted(superseded_requirement_ids, key=str), list(new_items.values())
+
+
+@router.post(
+    "/opportunities/{opportunity_id}/amendments/acknowledge",
+    response_model=AcknowledgeAmendmentResponse,
+)
+def acknowledge_opportunity_amendment(
+    opportunity_id: UUID,
+    request: AcknowledgeAmendmentRequest,
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> AcknowledgeAmendmentResponse:
+    _sam_opportunity(opportunity_id, identity)
+    if identity.membership.role is not OrganizationRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only organization admins can apply amendment changes",
+        )
+    organization_id = identity.organization.id
+    pipeline_item = _store.get_pipeline_item_by_opportunity(opportunity_id, organization_id)
+    if pipeline_item is None or pipeline_item.status not in {
+        PipelineStatus.PURSUE,
+        PipelineStatus.PREPARING_BID,
+        PipelineStatus.SUBMITTED,
+    }:
+        raise HTTPException(
+            status_code=409,
+            detail="Mark the opportunity as pursue before applying amendment changes",
+        )
+    snapshots = _store.list_sam_snapshots(opportunity_id)
+    by_id = {snapshot.id: snapshot for snapshot in snapshots}
+    previous = by_id.get(request.previous_snapshot_id)
+    current = by_id.get(request.current_snapshot_id)
+    if previous is None or current is None:
+        raise HTTPException(status_code=404, detail="Opportunity snapshot not found")
+    try:
+        comparison = compare_amendments(
+            opportunity_id,
+            previous,
+            current,
+            _requirements_for_snapshot(opportunity_id, previous.content_sha256, organization_id),
+            _requirements_for_snapshot(opportunity_id, current.content_sha256, organization_id),
+        )
+        superseded_requirement_ids, new_compliance_items = _selected_compliance_items(
+            comparison, request.selections, organization_id
+        )
+        acknowledgement = _store.apply_amendment_acknowledgement(
+            AmendmentAcknowledgement(
+                organization_id=organization_id,
+                opportunity_id=opportunity_id,
+                previous_snapshot_id=previous.id,
+                current_snapshot_id=current.id,
+                selections=request.selections,
+                acknowledged_by_user_id=identity.user.id,
+            ),
+            superseded_requirement_ids,
+            new_compliance_items,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return AcknowledgeAmendmentResponse(
+        acknowledgement=acknowledgement,
+        compliance_items=_store.list_compliance_items(opportunity_id, organization_id),
+    )
+
+
+@router.get(
+    "/opportunities/{opportunity_id}/amendments/acknowledgements",
+    response_model=list[AmendmentAcknowledgement],
+)
+def list_opportunity_amendment_acknowledgements(
+    opportunity_id: UUID,
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> list[AmendmentAcknowledgement]:
+    _sam_opportunity(opportunity_id, identity)
+    return _store.list_amendment_acknowledgements(opportunity_id, identity.organization.id)
 
 
 def _csv_cell(value: object | None) -> str:
@@ -904,10 +1056,7 @@ def export_compliance_matrix(
     if opportunity is None:
         raise HTTPException(status_code=404, detail="Opportunity not found")
 
-    documents = {
-        document.id: document
-        for document in _store.list_documents(organization_id)
-    }
+    documents = {document.id: document for document in _store.list_documents(organization_id)}
     output = io.StringIO(newline="")
     writer = csv.writer(output, quoting=csv.QUOTE_ALL, lineterminator="\r\n")
     writer.writerow(
@@ -972,9 +1121,7 @@ def export_compliance_matrix(
         content="\ufeff" + output.getvalue(),
         media_type="text/csv",
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="compliance-{opportunity_id}.csv"'
-            )
+            "Content-Disposition": (f'attachment; filename="compliance-{opportunity_id}.csv"')
         },
     )
 
@@ -1008,15 +1155,11 @@ def initialize_compliance_matrix(
     }
     for requirement in opportunity.requirements:
         if requirement.id not in existing:
-            item = compliance_item_from_requirement(
-                requirement, organization_id, opportunity_id
-            )
+            item = compliance_item_from_requirement(requirement, organization_id, opportunity_id)
             try:
                 existing[requirement.id] = _store.save_compliance_item(item)
             except ValueError as exc:
-                winner = _store.get_compliance_item_by_requirement(
-                    requirement.id, organization_id
-                )
+                winner = _store.get_compliance_item_by_requirement(requirement.id, organization_id)
                 if winner is None:
                     raise HTTPException(status_code=409, detail=str(exc)) from exc
                 existing[requirement.id] = winner
@@ -1039,10 +1182,7 @@ def update_compliance_item(
         owner = _store.get_identity_by_user_id(request.owner_user_id)
         if owner is None or owner.organization.id != identity.organization.id:
             raise HTTPException(status_code=404, detail="Owner not found")
-    changes = {
-        field_name: getattr(request, field_name)
-        for field_name in request.model_fields_set
-    }
+    changes = {field_name: getattr(request, field_name) for field_name in request.model_fields_set}
     resulting_status = changes.get("status", item.status)
     resulting_evidence = changes.get("business_evidence", item.business_evidence)
     if resulting_status is ComplianceStatus.COVERED and not resulting_evidence:

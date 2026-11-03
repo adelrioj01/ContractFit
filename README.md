@@ -111,6 +111,8 @@ Useful API routes:
 - `GET /api/opportunities`
 - `GET /api/opportunities/{opportunity_id}`
 - `GET /api/opportunities/{opportunity_id}/amendments/compare`
+- `POST /api/opportunities/{opportunity_id}/amendments/acknowledge`
+- `GET /api/opportunities/{opportunity_id}/amendments/acknowledgements`
 - `POST /api/opportunities/{opportunity_id}/compliance/initialize`
 - `GET /api/opportunities/{opportunity_id}/compliance/export.csv`
 - `PATCH /api/compliance/items/{item_id}`

@@ -43,6 +43,9 @@ def test_dashboard_exposes_compliance_workspace_and_source_navigation() -> None:
     assert "/amendments/compare" in dashboard
     assert "compareAmendments" in dashboard
     assert "item.change_type!=='unchanged'" in dashboard
+    assert "data-amendment-selection" in dashboard
+    assert "data-apply-amendment" in dashboard
+    assert "/amendments/acknowledge" in dashboard
 
 
 def test_dashboard_exposes_opportunity_monitoring_controls() -> None:

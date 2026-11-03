@@ -4,13 +4,15 @@ from threading import RLock
 from typing import Protocol
 from uuid import UUID
 
+from contractfit.amendments import AmendmentAcknowledgement
 from contractfit.auth import AuthIdentity
-from contractfit.compliance import ComplianceItem
+from contractfit.compliance import ComplianceItem, ComplianceStatus
 from contractfit.domain import (
     CompanyProfile,
     DocumentPage,
     Opportunity,
     ProcessingJob,
+    Requirement,
     SourceDocument,
 )
 from contractfit.embeddings import EmbeddingHit, EmbeddingTarget, SemanticEmbedding
@@ -94,6 +96,15 @@ class ContractFitStore(Protocol):
     def list_compliance_items(
         self, opportunity_id: UUID, organization_id: UUID
     ) -> list[ComplianceItem]: ...
+    def apply_amendment_acknowledgement(
+        self,
+        acknowledgement: AmendmentAcknowledgement,
+        superseded_requirement_ids: list[UUID],
+        new_compliance_items: list[ComplianceItem],
+    ) -> AmendmentAcknowledgement: ...
+    def list_amendment_acknowledgements(
+        self, opportunity_id: UUID, organization_id: UUID
+    ) -> list[AmendmentAcknowledgement]: ...
     def save_opportunity_watch(self, watch: OpportunityWatch) -> OpportunityWatch: ...
     def get_opportunity_watch(
         self, opportunity_id: UUID, organization_id: UUID
@@ -181,6 +192,7 @@ class InMemoryStore:
         self.opportunities: dict[UUID, Opportunity] = {}
         self.pipeline_items: dict[UUID, PipelineItem] = {}
         self.compliance_items: dict[UUID, ComplianceItem] = {}
+        self.amendment_acknowledgements: dict[UUID, AmendmentAcknowledgement] = {}
         self.opportunity_watches: dict[UUID, OpportunityWatch] = {}
         self.opportunity_alerts: dict[UUID, OpportunityAlert] = {}
         self.notification_preferences: dict[UUID, NotificationPreference] = {}
@@ -190,6 +202,7 @@ class InMemoryStore:
         self.embeddings: dict[tuple[EmbeddingTarget, UUID, str], SemanticEmbedding] = {}
         self.review_items: dict[UUID, ReviewItem] = {}
         self._review_lock = RLock()
+        self._amendment_lock = RLock()
         self.identities: dict[UUID, AuthIdentity] = {}
 
     def reset(self) -> None:
@@ -201,6 +214,7 @@ class InMemoryStore:
         self.opportunities.clear()
         self.pipeline_items.clear()
         self.compliance_items.clear()
+        self.amendment_acknowledgements.clear()
         self.opportunity_watches.clear()
         self.opportunity_alerts.clear()
         self.notification_preferences.clear()
@@ -298,8 +312,12 @@ class InMemoryStore:
     ) -> list[SourceDocument]:
         document_ids = {
             document_id
-            for (tenant_id, opportunity_id, _, snapshot_sha256), document_id
-            in self.document_origins.items()
+            for (
+                tenant_id,
+                opportunity_id,
+                _,
+                snapshot_sha256,
+            ), document_id in self.document_origins.items()
             if tenant_id == organization_id
             and opportunity_id == origin_opportunity_id
             and snapshot_sha256 == origin_snapshot_sha256
@@ -430,12 +448,14 @@ class InMemoryStore:
         )
 
     def save_compliance_item(self, item: ComplianceItem) -> ComplianceItem:
+        with self._amendment_lock:
+            return self._save_compliance_item_unlocked(item)
+
+    def _save_compliance_item_unlocked(self, item: ComplianceItem) -> ComplianceItem:
         opportunity = self.get_opportunity(item.opportunity_id, item.organization_id)
         if opportunity is None:
             raise ValueError("compliance opportunity is not visible to the organization")
-        requirement = next(
-            (entry for entry in opportunity.requirements if entry.id == item.requirement_id), None
-        )
+        requirement = self._compliance_requirement(item)
         if requirement is None:
             raise ValueError("compliance requirement does not belong to the opportunity")
         duplicate = self.get_compliance_item_by_requirement(
@@ -448,9 +468,26 @@ class InMemoryStore:
         self.compliance_items[item.id] = item
         return item
 
-    def get_compliance_item(
-        self, item_id: UUID, organization_id: UUID
-    ) -> ComplianceItem | None:
+    def _compliance_requirement(self, item: ComplianceItem) -> Requirement | None:
+        for opportunity in self.list_opportunities(item.organization_id):
+            requirement = next(
+                (entry for entry in opportunity.requirements if entry.id == item.requirement_id),
+                None,
+            )
+            if requirement is None:
+                continue
+            if opportunity.id == item.opportunity_id:
+                return requirement
+            document = (
+                self.get_document(opportunity.document_id, item.organization_id)
+                if opportunity.document_id is not None
+                else None
+            )
+            if document is not None and document.origin_opportunity_id == item.opportunity_id:
+                return requirement
+        return None
+
+    def get_compliance_item(self, item_id: UUID, organization_id: UUID) -> ComplianceItem | None:
         item = self.compliance_items.get(item_id)
         return item if item is not None and item.organization_id == organization_id else None
 
@@ -461,8 +498,7 @@ class InMemoryStore:
             (
                 item
                 for item in self.compliance_items.values()
-                if item.requirement_id == requirement_id
-                and item.organization_id == organization_id
+                if item.requirement_id == requirement_id and item.organization_id == organization_id
             ),
             None,
         )
@@ -474,10 +510,101 @@ class InMemoryStore:
             (
                 item
                 for item in self.compliance_items.values()
-                if item.opportunity_id == opportunity_id
-                and item.organization_id == organization_id
+                if item.opportunity_id == opportunity_id and item.organization_id == organization_id
             ),
             key=lambda item: (item.created_at, str(item.id)),
+        )
+
+    def apply_amendment_acknowledgement(
+        self,
+        acknowledgement: AmendmentAcknowledgement,
+        superseded_requirement_ids: list[UUID],
+        new_compliance_items: list[ComplianceItem],
+    ) -> AmendmentAcknowledgement:
+        with self._amendment_lock:
+            existing = next(
+                (
+                    item
+                    for item in self.amendment_acknowledgements.values()
+                    if item.organization_id == acknowledgement.organization_id
+                    and item.opportunity_id == acknowledgement.opportunity_id
+                    and item.previous_snapshot_id == acknowledgement.previous_snapshot_id
+                    and item.current_snapshot_id == acknowledgement.current_snapshot_id
+                ),
+                None,
+            )
+            if existing is not None:
+                if existing.selections != acknowledgement.selections:
+                    raise ValueError("amendment version pair was acknowledged differently")
+                return existing
+            if (
+                self.get_opportunity(
+                    acknowledgement.opportunity_id, acknowledgement.organization_id
+                )
+                is None
+            ):
+                raise ValueError("amendment opportunity is not visible to the organization")
+            snapshots = {
+                item.id: item for item in self.list_sam_snapshots(acknowledgement.opportunity_id)
+            }
+            if (
+                acknowledgement.previous_snapshot_id not in snapshots
+                or acknowledgement.current_snapshot_id not in snapshots
+            ):
+                raise ValueError("amendment snapshots do not belong to the opportunity")
+            reviewer = self.get_identity_by_user_id(acknowledgement.acknowledged_by_user_id)
+            if reviewer is None or reviewer.organization.id != acknowledgement.organization_id:
+                raise ValueError("acknowledging user does not belong to the organization")
+            for item in new_compliance_items:
+                if item.organization_id != acknowledgement.organization_id or (
+                    item.opportunity_id != acknowledgement.opportunity_id
+                ):
+                    raise ValueError("compliance update belongs to another workspace")
+                requirement = self._compliance_requirement(item)
+                if requirement is None or item.source_evidence != requirement.evidence:
+                    raise ValueError("compliance update has invalid requirement evidence")
+            previous_items = dict(self.compliance_items)
+            try:
+                now = datetime.now(UTC)
+                for requirement_id in superseded_requirement_ids:
+                    existing_item = self.get_compliance_item_by_requirement(
+                        requirement_id, acknowledgement.organization_id
+                    )
+                    if (
+                        existing_item is not None
+                        and existing_item.opportunity_id == acknowledgement.opportunity_id
+                    ):
+                        self.compliance_items[existing_item.id] = existing_item.model_copy(
+                            update={
+                                "status": ComplianceStatus.NOT_APPLICABLE,
+                                "updated_at": now,
+                            }
+                        )
+                for item in new_compliance_items:
+                    if (
+                        self.get_compliance_item_by_requirement(
+                            item.requirement_id, acknowledgement.organization_id
+                        )
+                        is None
+                    ):
+                        self.save_compliance_item(item)
+                self.amendment_acknowledgements[acknowledgement.id] = acknowledgement
+            except Exception:
+                self.compliance_items = previous_items
+                raise
+            return acknowledgement
+
+    def list_amendment_acknowledgements(
+        self, opportunity_id: UUID, organization_id: UUID
+    ) -> list[AmendmentAcknowledgement]:
+        return sorted(
+            (
+                item
+                for item in self.amendment_acknowledgements.values()
+                if item.opportunity_id == opportunity_id and item.organization_id == organization_id
+            ),
+            key=lambda item: (item.acknowledged_at, str(item.id)),
+            reverse=True,
         )
 
     def save_opportunity_watch(self, watch: OpportunityWatch) -> OpportunityWatch:

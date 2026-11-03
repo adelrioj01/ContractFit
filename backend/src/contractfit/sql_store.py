@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.sql.elements import ColumnElement
 
+from contractfit.amendments import AmendmentAcknowledgement, AmendmentSelection
 from contractfit.auth import (
     AuthIdentity,
     Organization,
@@ -37,6 +38,7 @@ from contractfit.domain import (
 from contractfit.embeddings import EmbeddingHit, EmbeddingTarget, SemanticEmbedding
 from contractfit.notifications import DeliveryStatus, NotificationDelivery, NotificationPreference
 from contractfit.persistence_models import (
+    AmendmentAcknowledgementRecord,
     CompanyProfileRecord,
     ComplianceItemRecord,
     DocumentOriginRecord,
@@ -85,6 +87,7 @@ class SqlAlchemyStore:
 
     def reset(self) -> None:
         with transaction(self.session_factory) as session:
+            session.execute(delete(AmendmentAcknowledgementRecord))
             session.execute(delete(ComplianceItemRecord))
             session.execute(delete(SemanticEmbeddingRecord))
             session.execute(delete(ReviewEvidenceRecord))
@@ -221,40 +224,38 @@ class SqlAlchemyStore:
         organization_id: UUID,
     ) -> list[SourceDocument]:
         with transaction(self.session_factory) as session:
-            records = session.scalars(
-                select(SourceDocumentRecord)
-                .outerjoin(
-                    DocumentOriginRecord,
-                    DocumentOriginRecord.document_id == SourceDocumentRecord.id,
-                )
-                .where(
-                    SourceDocumentRecord.organization_id == organization_id,
-                    or_(
-                        (
-                            (DocumentOriginRecord.organization_id == organization_id)
-                            & (
-                                DocumentOriginRecord.opportunity_id
-                                == origin_opportunity_id
-                            )
-                            & (
-                                DocumentOriginRecord.snapshot_sha256
-                                == origin_snapshot_sha256
-                            )
-                        ),
-                        (
+            records = (
+                session.scalars(
+                    select(SourceDocumentRecord)
+                    .outerjoin(
+                        DocumentOriginRecord,
+                        DocumentOriginRecord.document_id == SourceDocumentRecord.id,
+                    )
+                    .where(
+                        SourceDocumentRecord.organization_id == organization_id,
+                        or_(
                             (
-                                SourceDocumentRecord.origin_opportunity_id
-                                == origin_opportunity_id
-                            )
-                            & (
-                                SourceDocumentRecord.origin_snapshot_sha256
-                                == origin_snapshot_sha256
-                            )
+                                (DocumentOriginRecord.organization_id == organization_id)
+                                & (DocumentOriginRecord.opportunity_id == origin_opportunity_id)
+                                & (DocumentOriginRecord.snapshot_sha256 == origin_snapshot_sha256)
+                            ),
+                            (
+                                (
+                                    SourceDocumentRecord.origin_opportunity_id
+                                    == origin_opportunity_id
+                                )
+                                & (
+                                    SourceDocumentRecord.origin_snapshot_sha256
+                                    == origin_snapshot_sha256
+                                )
+                            ),
                         ),
-                    ),
+                    )
+                    .order_by(SourceDocumentRecord.filename, SourceDocumentRecord.id)
                 )
-                .order_by(SourceDocumentRecord.filename, SourceDocumentRecord.id)
-            ).unique().all()
+                .unique()
+                .all()
+            )
             return [self._document_from_record(record) for record in records]
 
     def save_document_pages(self, pages: list[DocumentPage]) -> list[DocumentPage]:
@@ -452,9 +453,7 @@ class SqlAlchemyStore:
         opportunity = self.get_opportunity(item.opportunity_id, item.organization_id)
         if opportunity is None:
             raise ValueError("compliance opportunity is not visible to the organization")
-        requirement = next(
-            (entry for entry in opportunity.requirements if entry.id == item.requirement_id), None
-        )
+        requirement = self._compliance_requirement(item)
         if requirement is None:
             raise ValueError("compliance requirement does not belong to the opportunity")
         if item.source_evidence != requirement.evidence:
@@ -487,9 +486,26 @@ class SqlAlchemyStore:
             raise ValueError("requirement is already in the compliance matrix") from exc
         return item
 
-    def get_compliance_item(
-        self, item_id: UUID, organization_id: UUID
-    ) -> ComplianceItem | None:
+    def _compliance_requirement(self, item: ComplianceItem) -> Requirement | None:
+        for opportunity in self.list_opportunities(item.organization_id):
+            requirement = next(
+                (entry for entry in opportunity.requirements if entry.id == item.requirement_id),
+                None,
+            )
+            if requirement is None:
+                continue
+            if opportunity.id == item.opportunity_id:
+                return requirement
+            document = (
+                self.get_document(opportunity.document_id, item.organization_id)
+                if opportunity.document_id is not None
+                else None
+            )
+            if document is not None and document.origin_opportunity_id == item.opportunity_id:
+                return requirement
+        return None
+
+    def get_compliance_item(self, item_id: UUID, organization_id: UUID) -> ComplianceItem | None:
         with transaction(self.session_factory) as session:
             record = session.scalars(
                 select(ComplianceItemRecord).where(
@@ -524,6 +540,166 @@ class SqlAlchemyStore:
                 .order_by(ComplianceItemRecord.created_at, ComplianceItemRecord.id)
             ).all()
             return [self._compliance_item_from_record(record) for record in records]
+
+    def apply_amendment_acknowledgement(
+        self,
+        acknowledgement: AmendmentAcknowledgement,
+        superseded_requirement_ids: list[UUID],
+        new_compliance_items: list[ComplianceItem],
+    ) -> AmendmentAcknowledgement:
+        existing = self._get_amendment_acknowledgement(
+            acknowledgement.opportunity_id,
+            acknowledgement.organization_id,
+            acknowledgement.previous_snapshot_id,
+            acknowledgement.current_snapshot_id,
+        )
+        if existing is not None:
+            if existing.selections != acknowledgement.selections:
+                raise ValueError("amendment version pair was acknowledged differently")
+            return existing
+        if (
+            self.get_opportunity(acknowledgement.opportunity_id, acknowledgement.organization_id)
+            is None
+        ):
+            raise ValueError("amendment opportunity is not visible to the organization")
+        snapshots = {
+            item.id: item for item in self.list_sam_snapshots(acknowledgement.opportunity_id)
+        }
+        if (
+            acknowledgement.previous_snapshot_id not in snapshots
+            or acknowledgement.current_snapshot_id not in snapshots
+        ):
+            raise ValueError("amendment snapshots do not belong to the opportunity")
+        reviewer = self.get_identity_by_user_id(acknowledgement.acknowledged_by_user_id)
+        if reviewer is None or reviewer.organization.id != acknowledgement.organization_id:
+            raise ValueError("acknowledging user does not belong to the organization")
+        for item in new_compliance_items:
+            requirement = self._compliance_requirement(item)
+            if (
+                item.organization_id != acknowledgement.organization_id
+                or item.opportunity_id != acknowledgement.opportunity_id
+                or requirement is None
+                or item.source_evidence != requirement.evidence
+            ):
+                raise ValueError("compliance update has invalid requirement evidence")
+
+        try:
+            with transaction(self.session_factory) as session:
+                concurrent = session.scalars(
+                    select(AmendmentAcknowledgementRecord)
+                    .where(
+                        AmendmentAcknowledgementRecord.organization_id
+                        == acknowledgement.organization_id,
+                        AmendmentAcknowledgementRecord.opportunity_id
+                        == acknowledgement.opportunity_id,
+                        AmendmentAcknowledgementRecord.previous_snapshot_id
+                        == acknowledgement.previous_snapshot_id,
+                        AmendmentAcknowledgementRecord.current_snapshot_id
+                        == acknowledgement.current_snapshot_id,
+                    )
+                    .with_for_update()
+                ).first()
+                if concurrent is not None:
+                    found = self._amendment_acknowledgement_from_record(concurrent)
+                    if found.selections != acknowledgement.selections:
+                        raise ValueError("amendment version pair was acknowledged differently")
+                    return found
+                if superseded_requirement_ids:
+                    superseded = session.scalars(
+                        select(ComplianceItemRecord)
+                        .where(
+                            ComplianceItemRecord.organization_id == acknowledgement.organization_id,
+                            ComplianceItemRecord.opportunity_id == acknowledgement.opportunity_id,
+                            ComplianceItemRecord.requirement_id.in_(superseded_requirement_ids),
+                        )
+                        .with_for_update()
+                    ).all()
+                    now = datetime.now(UTC)
+                    for record in superseded:
+                        record.status = ComplianceStatus.NOT_APPLICABLE.value
+                        record.updated_at = now
+                for item in new_compliance_items:
+                    present = session.scalars(
+                        select(ComplianceItemRecord)
+                        .where(
+                            ComplianceItemRecord.organization_id == acknowledgement.organization_id,
+                            ComplianceItemRecord.requirement_id == item.requirement_id,
+                        )
+                        .with_for_update()
+                    ).first()
+                    if present is not None:
+                        continue
+                    payload = item.model_dump(exclude={"source_evidence"})
+                    payload.update(
+                        {
+                            "priority": item.priority.value,
+                            "status": item.status.value,
+                            "business_evidence": [
+                                entry.model_dump() for entry in item.business_evidence
+                            ],
+                            "evidence_document_id": item.source_evidence.document_id,
+                            "evidence_page": item.source_evidence.page,
+                            "evidence_section": item.source_evidence.section,
+                            "evidence_supporting_text": (item.source_evidence.supporting_text),
+                        }
+                    )
+                    session.add(ComplianceItemRecord(**payload))
+                session.add(
+                    AmendmentAcknowledgementRecord(
+                        **acknowledgement.model_dump(exclude={"selections"}),
+                        selections=[
+                            item.model_dump(mode="json") for item in acknowledgement.selections
+                        ],
+                    )
+                )
+        except IntegrityError as exc:
+            winner = self._get_amendment_acknowledgement(
+                acknowledgement.opportunity_id,
+                acknowledgement.organization_id,
+                acknowledgement.previous_snapshot_id,
+                acknowledgement.current_snapshot_id,
+            )
+            if winner is not None and winner.selections == acknowledgement.selections:
+                return winner
+            raise ValueError("amendment acknowledgement conflicts with stored data") from exc
+        return acknowledgement
+
+    def _get_amendment_acknowledgement(
+        self,
+        opportunity_id: UUID,
+        organization_id: UUID,
+        previous_snapshot_id: UUID,
+        current_snapshot_id: UUID,
+    ) -> AmendmentAcknowledgement | None:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(AmendmentAcknowledgementRecord).where(
+                    AmendmentAcknowledgementRecord.opportunity_id == opportunity_id,
+                    AmendmentAcknowledgementRecord.organization_id == organization_id,
+                    AmendmentAcknowledgementRecord.previous_snapshot_id == previous_snapshot_id,
+                    AmendmentAcknowledgementRecord.current_snapshot_id == current_snapshot_id,
+                )
+            ).first()
+            return (
+                self._amendment_acknowledgement_from_record(record) if record is not None else None
+            )
+
+    def list_amendment_acknowledgements(
+        self, opportunity_id: UUID, organization_id: UUID
+    ) -> list[AmendmentAcknowledgement]:
+        with transaction(self.session_factory) as session:
+            records = session.scalars(
+                select(AmendmentAcknowledgementRecord)
+                .where(
+                    AmendmentAcknowledgementRecord.opportunity_id == opportunity_id,
+                    AmendmentAcknowledgementRecord.organization_id == organization_id,
+                )
+                .order_by(
+                    AmendmentAcknowledgementRecord.acknowledged_at.desc(),
+                    AmendmentAcknowledgementRecord.id.desc(),
+                )
+            ).all()
+            return [self._amendment_acknowledgement_from_record(record) for record in records]
 
     def save_opportunity_watch(self, watch: OpportunityWatch) -> OpportunityWatch:
         if self.get_opportunity(watch.opportunity_id, watch.organization_id) is None:
@@ -1182,12 +1358,29 @@ class SqlAlchemyStore:
                 section=record.evidence_section,
                 supporting_text=record.evidence_supporting_text,
             ),
-            business_evidence=[BusinessEvidence.model_validate(item) for item in record.business_evidence],
+            business_evidence=[
+                BusinessEvidence.model_validate(item) for item in record.business_evidence
+            ],
             owner_user_id=record.owner_user_id,
             due_date=record.due_date,
             notes=record.notes,
             created_at=_ensure_aware(record.created_at),
             updated_at=_ensure_aware(record.updated_at),
+        )
+
+    @staticmethod
+    def _amendment_acknowledgement_from_record(
+        record: AmendmentAcknowledgementRecord,
+    ) -> AmendmentAcknowledgement:
+        return AmendmentAcknowledgement(
+            id=record.id,
+            organization_id=record.organization_id,
+            opportunity_id=record.opportunity_id,
+            previous_snapshot_id=record.previous_snapshot_id,
+            current_snapshot_id=record.current_snapshot_id,
+            selections=[AmendmentSelection.model_validate(item) for item in record.selections],
+            acknowledged_by_user_id=record.acknowledged_by_user_id,
+            acknowledged_at=_ensure_aware(record.acknowledged_at),
         )
 
     @staticmethod

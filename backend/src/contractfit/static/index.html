@@ -59,6 +59,7 @@ let selectedOpportunityId=null;
 let workspaceData={profile:null,opportunities:[],allOpportunities:[],matchesById:{},pipelineByOpportunity:{},watchByOpportunity:{}};
 let currentUser=null;
 let complianceWorkspace=null;
+let amendmentComparison=null;
 function renderProfile(profile,completeness){
   const form=document.querySelector('#profile-form');
   const project=profile?.past_performance?.[0]||{};
@@ -176,10 +177,24 @@ async function compareAmendments(){
   button.disabled=true;panel.classList.remove('hidden');panel.innerHTML='<p class="empty">Comparing the two latest SAM.gov snapshots…</p>';
   try{
     const comparison=await authFetch(`/api/opportunities/${encodeURIComponent(complianceWorkspace.opportunity.id)}/amendments/compare`).then(json);
+    amendmentComparison=comparison;
     const material=comparison.requirement_changes.filter(item=>item.change_type!=='unchanged');
     const metadata=comparison.metadata_changes.map(item=>`<li><strong>${esc(item.field)}</strong>: ${esc(item.previous??'not present')} → ${esc(item.current??'not present')}</li>`).join('');
-    panel.innerHTML=`<div class="eyebrow">Amendment comparison</div><h3>${material.length} requirement changes · ${comparison.metadata_changes.length} catalog changes</h3><p class="subtle">${esc(comparison.previous_snapshot.observed_at)} → ${esc(comparison.current_snapshot.observed_at)}</p>${metadata?`<h4>Catalog fields</h4><ul class="plain-list">${metadata}</ul>`:''}<h4>Requirements</h4>${material.length?`<div class="amendment-grid">${material.map(item=>`<article class="amendment-change"><span class="decision">${esc(item.change_type)}</span>${amendmentVersion(item.previous,'Previous')}${amendmentVersion(item.current,'Current')}</article>`).join('')}</div>`:'<p class="empty">No deterministic requirement changes were found in analyzed attachments.</p>'}<p class="summary-copy">${comparison.limitations.map(esc).join(' ')}</p>`;
+    panel.innerHTML=`<div class="eyebrow">Amendment comparison</div><h3>${material.length} requirement changes · ${comparison.metadata_changes.length} catalog changes</h3><p class="subtle">${esc(comparison.previous_snapshot.observed_at)} → ${esc(comparison.current_snapshot.observed_at)}</p>${metadata?`<h4>Catalog fields</h4><ul class="plain-list">${metadata}</ul>`:''}<h4>Requirements</h4>${material.length?`<div class="amendment-grid">${material.map(item=>`<article class="amendment-change"><label class="checkbox-field"><input type="checkbox" data-amendment-selection data-change-type="${esc(item.change_type)}" data-previous-requirement="${esc(item.previous?.id||'')}" data-current-requirement="${esc(item.current?.id||'')}"> Apply ${esc(item.change_type)} change</label>${amendmentVersion(item.previous,'Previous')}${amendmentVersion(item.current,'Current')}</article>`).join('')}</div><div class="actions"><button type="button" data-apply-amendment>Apply selected changes</button></div>`:'<p class="empty">No deterministic requirement changes were found in analyzed attachments.</p>'}<p class="summary-copy">${comparison.limitations.map(esc).join(' ')}</p>`;
   }catch(error){panel.innerHTML=`<p class="empty">${esc(error instanceof Error?error.message:'Unable to compare amendments.')}</p>`}finally{button.disabled=false}
+}
+async function applySelectedAmendment(event){
+  const button=event.target.closest('[data-apply-amendment]');
+  if(!button||!complianceWorkspace||!amendmentComparison)return;
+  const selections=[...document.querySelectorAll('[data-amendment-selection]:checked')].map(input=>({change_type:input.dataset.changeType,previous_requirement_id:input.dataset.previousRequirement||null,current_requirement_id:input.dataset.currentRequirement||null}));
+  if(!selections.length){alert('Select at least one material requirement change.');return}
+  button.disabled=true;
+  try{
+    const result=await authFetch(`/api/opportunities/${encodeURIComponent(complianceWorkspace.opportunity.id)}/amendments/acknowledge`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({previous_snapshot_id:amendmentComparison.previous_snapshot.id,current_snapshot_id:amendmentComparison.current_snapshot.id,selections})}).then(json);
+    complianceWorkspace.compliance_items=result.compliance_items;
+    renderComplianceWorkspace(complianceWorkspace);
+    alert('Selected amendment changes were recorded and applied to the compliance matrix.');
+  }catch(error){alert(error instanceof Error?error.message:'Unable to apply amendment changes.');button.disabled=false}
 }
 async function load(){
   try{
@@ -534,6 +549,7 @@ document.querySelector('#pipeline-list').addEventListener('submit',savePipelineI
 document.querySelector('#compliance-matrix').addEventListener('submit',saveComplianceItem);
 document.querySelector('#compliance-matrix').addEventListener('click',showDocumentPage);
 document.querySelector('#amendment-comparison').addEventListener('click',showDocumentPage);
+document.querySelector('#amendment-comparison').addEventListener('click',applySelectedAmendment);
 document.querySelector('#compare-amendments').addEventListener('click',compareAmendments);
 document.querySelector('#export-compliance').addEventListener('click',exportComplianceMatrix);
 document.querySelector('#close-compliance').addEventListener('click',()=>{document.querySelector('#compliance').classList.add('hidden');location.hash='opportunities'});

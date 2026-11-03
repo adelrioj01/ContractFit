@@ -81,7 +81,7 @@ with both plain text and image-only PDF inputs.
   responsible user, due date and explicit business evidence.
 - [x] Read-only deterministic amendment comparison across SAM.gov snapshots and analyzed
   organization attachments, with both source citations preserved.
-- Persisted amendment acknowledgements and selective compliance-matrix updates.
+- [x] Persisted amendment acknowledgements and selective compliance-matrix updates.
 - [x] Organization-scoped compliance CSV export with source citations and business evidence.
 - [x] Watched opportunities, deadline reminders and amendment change alerts.
 - [x] Organization email preferences, auditable outbox and optional SMTP worker.

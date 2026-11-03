@@ -282,6 +282,38 @@ class ComplianceItemRecord(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
+class AmendmentAcknowledgementRecord(Base):
+    __tablename__ = "amendment_acknowledgements"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "opportunity_id",
+            "previous_snapshot_id",
+            "current_snapshot_id",
+            name="uq_amendment_acknowledgements_version_pair",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    organization_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id", ondelete="CASCADE"), index=True
+    )
+    opportunity_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("opportunities.id", ondelete="CASCADE"), index=True
+    )
+    previous_snapshot_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("sam_opportunity_snapshots.id", ondelete="CASCADE"), index=True
+    )
+    current_snapshot_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("sam_opportunity_snapshots.id", ondelete="CASCADE"), index=True
+    )
+    selections: Mapped[list[dict[str, object]]] = mapped_column(JSON)
+    acknowledged_by_user_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("user_accounts.id", ondelete="RESTRICT"), index=True
+    )
+    acknowledged_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
 class OpportunityWatchRecord(Base):
     __tablename__ = "opportunity_watches"
     __table_args__ = (

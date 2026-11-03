@@ -2,10 +2,11 @@
 
 import json
 from collections import defaultdict
+from datetime import UTC, datetime
 from enum import StrEnum
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 
 from contractfit.domain import Evidence, Requirement
 from contractfit.sam_models import SamOpportunitySnapshot
@@ -47,6 +48,53 @@ class AmendmentComparison(BaseModel):
     limitations: list[str]
 
 
+class AmendmentSelection(BaseModel):
+    """A human-selected material change, identified only by extracted requirements."""
+
+    change_type: AmendmentChangeType
+    previous_requirement_id: UUID | None = None
+    current_requirement_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def validate_material_change(self) -> "AmendmentSelection":
+        if self.change_type is AmendmentChangeType.UNCHANGED:
+            raise ValueError("unchanged requirements cannot be selected")
+        if self.change_type is AmendmentChangeType.ADDED and self.current_requirement_id is None:
+            raise ValueError("added selections require a current requirement")
+        if self.change_type is AmendmentChangeType.REMOVED and self.previous_requirement_id is None:
+            raise ValueError("removed selections require a previous requirement")
+        if self.change_type is AmendmentChangeType.CHANGED and (
+            self.previous_requirement_id is None or self.current_requirement_id is None
+        ):
+            raise ValueError("changed selections require both requirement versions")
+        return self
+
+
+class AmendmentAcknowledgement(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
+    organization_id: UUID
+    opportunity_id: UUID
+    previous_snapshot_id: UUID
+    current_snapshot_id: UUID
+    selections: list[AmendmentSelection] = Field(min_length=1)
+    acknowledged_by_user_id: UUID
+    acknowledged_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    @model_validator(mode="after")
+    def canonicalize_selections(self) -> "AmendmentAcknowledgement":
+        def key(item: AmendmentSelection) -> tuple[str, str, str]:
+            return (
+                item.change_type.value,
+                str(item.previous_requirement_id or ""),
+                str(item.current_requirement_id or ""),
+            )
+
+        if len({key(item) for item in self.selections}) != len(self.selections):
+            raise ValueError("amendment selections must be unique")
+        self.selections = sorted(self.selections, key=key)
+        return self
+
+
 def compare_amendments(
     opportunity_id: UUID,
     previous_snapshot: SamOpportunitySnapshot,
@@ -68,8 +116,7 @@ def compare_amendments(
 
     metadata_changes = []
     fields = sorted(
-        set(previous_snapshot.normalized_payload)
-        | set(current_snapshot.normalized_payload)
+        set(previous_snapshot.normalized_payload) | set(current_snapshot.normalized_payload)
     )
     for field in fields:
         previous_present = field in previous_snapshot.normalized_payload
@@ -80,9 +127,7 @@ def compare_amendments(
             else None
         )
         current = (
-            _metadata_value(current_snapshot.normalized_payload[field])
-            if current_present
-            else None
+            _metadata_value(current_snapshot.normalized_payload[field]) if current_present else None
         )
         if previous_present != current_present or previous != current:
             metadata_changes.append(
@@ -175,6 +220,7 @@ def _compare_requirements(
         AmendmentChangeType.REMOVED: 2,
         AmendmentChangeType.UNCHANGED: 3,
     }
+
     def sort_key(item: RequirementChange) -> tuple[int, str, str]:
         version = item.current or item.previous
         if version is None:
