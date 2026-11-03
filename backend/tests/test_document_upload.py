@@ -193,11 +193,10 @@ def test_conflicting_upload_flows_to_review_and_match_without_false_citation(
         assert deadline_gate.evidence is None
 
         reviews = list_reviews(identity, review_status=None)
-        assert {item.extracted_value for item in reviews} == {
-            "2099-02-15",
-            "2099-03-01",
-        }
-        assert all(item.evidence for item in reviews)
+        assert len(reviews) == 1
+        assert reviews[0].field_name == "opportunity:response_deadline"
+        assert reviews[0].reason == "conflicting_values"
+        assert [evidence.page for evidence in reviews[0].evidence] == [1, 1]
     finally:
         settings.upload_directory = previous_directory
         settings.processing_mode = previous_mode

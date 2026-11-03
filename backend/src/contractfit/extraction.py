@@ -7,6 +7,13 @@ from uuid import uuid4
 from contractfit.domain import DocumentPage, Evidence, Opportunity, Requirement, SourceDocument
 
 
+def normalize_scalar_requirement(category: str, value: str) -> str:
+    """Normalize an extracted scalar for deterministic conflict comparison."""
+    if category == "value":
+        return str(Decimal(value.removeprefix("$").replace(",", "")))
+    return " ".join(value.casefold().split())
+
+
 class RequirementExtractor:
     """Evidence-preserving baseline extractor used locally and in evaluation."""
 
@@ -74,7 +81,7 @@ class RequirementExtractor:
             for category in scalar_categories
             if len(
                 {
-                    self._normalized_scalar(category, value)
+                    normalize_scalar_requirement(category, value)
                     for value, _ in matches.get(category, [])
                 }
             )
@@ -119,11 +126,5 @@ class RequirementExtractor:
         values = matches.get(category, [])
         if not values:
             return None
-        normalized = {cls._normalized_scalar(category, value) for value, _ in values}
+        normalized = {normalize_scalar_requirement(category, value) for value, _ in values}
         return values[-1][0] if len(normalized) == 1 else None
-
-    @staticmethod
-    def _normalized_scalar(category: str, value: str) -> str:
-        if category == "value":
-            return str(Decimal(value.replace(",", "")))
-        return " ".join(value.casefold().split())

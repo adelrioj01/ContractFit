@@ -1320,6 +1320,19 @@ def resolve_review(
     identity: Annotated[AuthIdentity, Depends(get_current_identity)],
 ) -> ReviewItem:
     item = get_review(review_id, identity)
+    if item.reason is ReviewReason.CONFLICTING_VALUES:
+        try:
+            return _store.resolve_conflicting_review(
+                review_id,
+                identity.organization.id,
+                identity.user.id,
+                request.corrected_value,
+                request.note,
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
     try:
         updated = item.resolve(
             reviewer_id=identity.user.id,

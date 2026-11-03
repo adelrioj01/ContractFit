@@ -1,5 +1,6 @@
 import math
 from datetime import UTC, datetime
+from threading import RLock
 from typing import Protocol
 from uuid import UUID
 
@@ -15,7 +16,12 @@ from contractfit.domain import (
 from contractfit.embeddings import EmbeddingHit, EmbeddingTarget, SemanticEmbedding
 from contractfit.notifications import DeliveryStatus, NotificationDelivery, NotificationPreference
 from contractfit.pipeline import PipelineItem
-from contractfit.review import ReviewItem, ReviewStatus, review_sort_key
+from contractfit.review import (
+    ReviewItem,
+    ReviewStatus,
+    resolve_conflicting_value,
+    review_sort_key,
+)
 from contractfit.sam_models import SamIngestionRun, SamOpportunitySnapshot
 from contractfit.watching import OpportunityAlert, OpportunityWatch
 
@@ -143,6 +149,14 @@ class ContractFitStore(Protocol):
         organization_id: UUID | None = None,
     ) -> list[EmbeddingHit]: ...
     def save_review_item(self, item: ReviewItem) -> ReviewItem: ...
+    def resolve_conflicting_review(
+        self,
+        review_id: UUID,
+        organization_id: UUID,
+        reviewer_id: UUID,
+        corrected_value: str,
+        note: str | None = None,
+    ) -> ReviewItem: ...
     def get_review_item(self, review_id: UUID, organization_id: UUID) -> ReviewItem | None: ...
     def list_review_items(
         self,
@@ -175,6 +189,7 @@ class InMemoryStore:
         self.sam_snapshots: dict[UUID, SamOpportunitySnapshot] = {}
         self.embeddings: dict[tuple[EmbeddingTarget, UUID, str], SemanticEmbedding] = {}
         self.review_items: dict[UUID, ReviewItem] = {}
+        self._review_lock = RLock()
         self.identities: dict[UUID, AuthIdentity] = {}
 
     def reset(self) -> None:
@@ -702,6 +717,32 @@ class InMemoryStore:
             raise ValueError("review evidence document is not owned by the organization")
         self.review_items[item.id] = item
         return item
+
+    def resolve_conflicting_review(
+        self,
+        review_id: UUID,
+        organization_id: UUID,
+        reviewer_id: UUID,
+        corrected_value: str,
+        note: str | None = None,
+    ) -> ReviewItem:
+        with self._review_lock:
+            item = self.get_review_item(review_id, organization_id)
+            if item is None or item.opportunity_id is None:
+                raise LookupError("review not found")
+            opportunity = self.get_opportunity(item.opportunity_id, organization_id)
+            if opportunity is None:
+                raise LookupError("opportunity not found")
+            resolved, updated_opportunity = resolve_conflicting_value(
+                item,
+                opportunity,
+                reviewer_id=reviewer_id,
+                corrected_value=corrected_value,
+                note=note,
+            )
+            self.opportunities[updated_opportunity.id] = updated_opportunity
+            self.review_items[resolved.id] = resolved
+            return resolved
 
     def get_review_item(self, review_id: UUID, organization_id: UUID) -> ReviewItem | None:
         item = self.review_items.get(review_id)

@@ -2,7 +2,7 @@ import pytest
 
 from contractfit.domain import DocumentPage, SourceDocument
 from contractfit.extraction import RequirementExtractor
-from contractfit.review import build_requirement_reviews
+from contractfit.review import ReviewReason, build_requirement_reviews
 from contractfit.sample_data import SAMPLE_PROFILE, SAMPLE_SOLICITATION
 
 
@@ -55,7 +55,10 @@ def test_conflicting_scalar_values_become_unknown_and_require_review() -> None:
     ]
     assert all(item.confidence < 0.75 for item in deadlines)
     reviews = build_requirement_reviews(opportunity, SAMPLE_PROFILE.organization_id)
-    assert {item.extracted_value for item in reviews} == {"2099-02-15", "2099-03-01"}
+    assert len(reviews) == 1
+    assert reviews[0].field_name == "opportunity:response_deadline"
+    assert reviews[0].reason == ReviewReason.CONFLICTING_VALUES
+    assert [evidence.page for evidence in reviews[0].evidence] == [1, 2]
 
 
 @pytest.mark.parametrize(

@@ -5,8 +5,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 
 from contractfit.database import Base, build_session_factory
-from contractfit.domain import Evidence, Opportunity, SourceDocument
-from contractfit.review import ReviewItem, ReviewReason, ReviewStatus
+from contractfit.domain import Evidence, Opportunity, Requirement, SourceDocument
+from contractfit.review import ReviewItem, ReviewReason, ReviewStatus, build_requirement_reviews
 from contractfit.sql_store import SqlAlchemyStore
 from contractfit.store import ContractFitStore, InMemoryStore
 
@@ -130,3 +130,127 @@ def test_review_store_rejects_foreign_references_and_accepts_public_opportunitie
         )
     )
     assert saved.opportunity_id == public_opportunity.id
+
+
+def test_conflicting_review_resolution_updates_private_opportunity_atomically(
+    store: ContractFitStore,
+) -> None:
+    organization_id = uuid4()
+    document = store.save_document(
+        SourceDocument(
+            organization_id=organization_id,
+            filename="deadline.txt",
+            content="Response deadline: 2099-02-15\nDue date: 2099-03-01",
+        )
+    )
+    requirements = [
+        Requirement(
+            category="deadline",
+            description=value,
+            mandatory=True,
+            confidence=0.5,
+            evidence=Evidence(document_id=document.id, page=index, supporting_text=value),
+        )
+        for index, value in enumerate(("2099-02-15", "2099-03-01"), start=1)
+    ]
+    opportunity = store.save_opportunity(
+        Opportunity(
+            source="upload",
+            source_id=f"conflict-{uuid4()}",
+            title="Conflicting deadline",
+            document_id=document.id,
+            requirements=requirements,
+        )
+    )
+    pending = store.save_review_item(
+        build_requirement_reviews(opportunity, organization_id)[0]
+    )
+
+    resolved = store.resolve_conflicting_review(
+        pending.id,
+        organization_id,
+        uuid4(),
+        "2099-03-01",
+    )
+
+    assert resolved.status is ReviewStatus.RESOLVED
+    assert len(resolved.evidence) == 2
+    persisted = store.get_opportunity(opportunity.id, organization_id)
+    assert persisted is not None
+    assert persisted.response_deadline.isoformat() == "2099-03-01"
+
+    with pytest.raises(ValueError, match="cannot transition"):
+        store.resolve_conflicting_review(
+            pending.id,
+            organization_id,
+            uuid4(),
+            "2099-02-15",
+        )
+    unchanged = store.get_opportunity(opportunity.id, organization_id)
+    assert unchanged is not None
+    assert unchanged.response_deadline.isoformat() == "2099-03-01"
+
+
+def test_stale_conflicting_review_cannot_apply_evidence_from_reextraction(
+    store: ContractFitStore,
+) -> None:
+    organization_id = uuid4()
+    document = store.save_document(
+        SourceDocument(
+            organization_id=organization_id,
+            filename="deadline.txt",
+            content="deadlines",
+        )
+    )
+    original_requirements = [
+        Requirement(
+            category="deadline",
+            description=value,
+            mandatory=True,
+            confidence=0.5,
+            evidence=Evidence(document_id=document.id, page=index, supporting_text=value),
+        )
+        for index, value in enumerate(("2099-02-15", "2099-03-01"), start=1)
+    ]
+    opportunity = store.save_opportunity(
+        Opportunity(
+            source="upload",
+            source_id=f"stale-{uuid4()}",
+            title="Stale conflict",
+            document_id=document.id,
+            requirements=original_requirements,
+        )
+    )
+    pending = store.save_review_item(
+        build_requirement_reviews(opportunity, organization_id)[0]
+    )
+    reextracted = opportunity.model_copy(
+        update={
+            "requirements": [
+                requirement.model_copy(
+                    update={
+                        "evidence": requirement.evidence.model_copy(
+                            update={"supporting_text": f"amended {requirement.description}"}
+                        )
+                    }
+                )
+                for requirement in original_requirements
+            ]
+        }
+    )
+    store.save_opportunity(reextracted)
+
+    with pytest.raises(ValueError, match="stale"):
+        store.resolve_conflicting_review(
+            pending.id,
+            organization_id,
+            uuid4(),
+            "2099-03-01",
+        )
+
+    unchanged_review = store.get_review_item(pending.id, organization_id)
+    unchanged_opportunity = store.get_opportunity(opportunity.id, organization_id)
+    assert unchanged_review is not None
+    assert unchanged_review.status is ReviewStatus.PENDING
+    assert unchanged_opportunity is not None
+    assert unchanged_opportunity.response_deadline is None

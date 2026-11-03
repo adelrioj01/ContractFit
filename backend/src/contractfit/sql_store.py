@@ -60,7 +60,13 @@ from contractfit.persistence_models import (
     UserAccountRecord,
 )
 from contractfit.pipeline import PipelineItem, PipelineStatus
-from contractfit.review import ReviewItem, ReviewReason, ReviewStatus, review_sort_key
+from contractfit.review import (
+    ReviewItem,
+    ReviewReason,
+    ReviewStatus,
+    resolve_conflicting_value,
+    review_sort_key,
+)
 from contractfit.sam_models import (
     SamIngestionRun,
     SamIngestionStatus,
@@ -875,6 +881,66 @@ class SqlAlchemyStore:
                 )
             )
         return item
+
+    def resolve_conflicting_review(
+        self,
+        review_id: UUID,
+        organization_id: UUID,
+        reviewer_id: UUID,
+        corrected_value: str,
+        note: str | None = None,
+    ) -> ReviewItem:
+        with transaction(self.session_factory) as session:
+            review_record = (
+                session.scalars(
+                    select(ReviewItemRecord)
+                    .where(
+                        ReviewItemRecord.id == review_id,
+                        ReviewItemRecord.organization_id == organization_id,
+                    )
+                    .with_for_update()
+                )
+                .unique()
+                .first()
+            )
+            if review_record is None or review_record.opportunity_id is None:
+                raise LookupError("review not found")
+            opportunity_record = (
+                session.scalars(
+                    select(OpportunityRecord)
+                    .join(
+                        SourceDocumentRecord,
+                        OpportunityRecord.document_id == SourceDocumentRecord.id,
+                    )
+                    .where(
+                        OpportunityRecord.id == review_record.opportunity_id,
+                        SourceDocumentRecord.organization_id == organization_id,
+                    )
+                    .with_for_update()
+                )
+                .unique()
+                .first()
+            )
+            if opportunity_record is None:
+                raise LookupError("opportunity not found")
+            item = self._review_from_record(review_record)
+            opportunity = self._opportunity_from_record(opportunity_record)
+            resolved, updated_opportunity = resolve_conflicting_value(
+                item,
+                opportunity,
+                reviewer_id=reviewer_id,
+                corrected_value=corrected_value,
+                note=note,
+            )
+            field_name = item.field_name.removeprefix("opportunity:")
+            setattr(opportunity_record, field_name, getattr(updated_opportunity, field_name))
+            review_record.status = resolved.status.value
+            review_record.corrected_value = resolved.corrected_value
+            review_record.reviewer_id = resolved.reviewer_id
+            review_record.resolution_note = resolved.resolution_note
+            review_record.updated_at = resolved.updated_at
+            review_record.resolved_at = resolved.resolved_at
+        return resolved
 
     def get_review_item(self, review_id: UUID, organization_id: UUID) -> ReviewItem | None:
         with transaction(self.session_factory) as session:
