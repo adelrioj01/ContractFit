@@ -64,6 +64,10 @@ ContractFit helps facilities-service contractors identify government opportuniti
   handoff; never claim that a chat was created when it was not.
 
 ## OpenCode delegation
+- Use OpenCode delegation only when the active session is running in Orca and the host exposes the
+  repository terminal, the `opencode` executable, and the configured model. Outside Orca, or when
+  any dependency is unavailable, continue with the available Codex workflow without blocking the
+  task or asking the user to install OpenCode.
 - Prefer `tools/opencode/delegate.ps1` when delegating bounded implementation or test work to the
   local OpenCode model. The script must run only from a clean orchestrator worktree.
 - Classify work with `docs/agent-delegation.md` before delegation. Delegate green tasks, split and

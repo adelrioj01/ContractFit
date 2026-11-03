@@ -4,6 +4,9 @@ This project defaults to the local `ollama/qwen2.5-coder:7b` model, so repositor
 the machine and the task does not consume Codex. OpenCode loads the root `AGENTS.md` automatically.
 Classify the task with `docs/agent-delegation.md` before creating a worktree.
 
+This integration is intended only for Orca sessions where the repository terminal, OpenCode, and
+the selected model are available. Other hosts should ignore this workflow and continue normally.
+
 The local model is suitable mainly for tightly scoped prompts with supplied context: its tool calls
 were emitted as text during validation instead of being executed. The free
 `opencode/big-pickle` model operated repository tools correctly, but it is an external provider and

@@ -5,6 +5,12 @@ based on the repository boundaries in `docs/architecture.md`: extraction and mat
 domain objects, while API, persistence, review, and organization visibility cross security and
 transaction boundaries.
 
+Apply this policy only from an Orca session that exposes the repository terminal and has both the
+`opencode` executable and selected model available. In any other host, or if OpenCode cannot run,
+the Codex orchestrator uses the capabilities available in that session and continues the task. A
+missing OpenCode integration is never a blocker and does not justify asking the user to install or
+configure it during unrelated work.
+
 The default delegated model is local `ollama/qwen2.5-coder:7b`, which keeps code on the machine but
 has unreliable tool calling in the current OpenCode/Ollama setup. Use it only for self-contained
 tasks with supplied context. `opencode/big-pickle` was verified to operate repository tools and
@@ -118,7 +124,8 @@ If any field is missing, the orchestrator completes the brief before invoking
 
 ## Acceptance workflow
 
-1. Codex classifies the task and writes the brief.
+1. Codex confirms the session is running in Orca and OpenCode is available, then classifies the
+   task and writes the brief. If either condition fails, Codex keeps the task in its normal flow.
 2. OpenCode works in `opencode/<task>` in its sibling worktree and commits locally.
 3. `contractfit-reviewer` may perform a read-only review, but cannot approve the change alone.
 4. Codex inspects the commit and surrounding code, rejects scope expansion, and cherry-picks only
