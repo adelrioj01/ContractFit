@@ -10,6 +10,8 @@ needed for an informed bid/no-bid decision.
 > data and reproducible regression evaluations; it does not claim production accuracy or replace
 > procurement or legal review.
 
+![ContractFit opportunity workspace](docs/screenshots/dashboard.png)
+
 ## Why it exists
 
 Government solicitations combine deadlines, certifications, set-asides, insurance limits,
