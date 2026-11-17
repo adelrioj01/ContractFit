@@ -71,6 +71,7 @@ from contractfit.evaluation import (
 )
 from contractfit.evaluation_dataset import EVALUATION_CASES, RANKING_EVALUATION_CASES
 from contractfit.extraction import RequirementExtractor
+from contractfit.feedback import FeedbackRating, OpportunityFeedback
 from contractfit.file_storage import FileStorageError, LocalFileStorage, StoredFile
 from contractfit.job_queue import InMemoryJobQueue, ProcessingJobQueue
 from contractfit.matching import OpportunityMatcher
@@ -128,6 +129,11 @@ def configure_processing(
 
 class SamAttachmentSource(Protocol):
     def download(self, url: str) -> DownloadedSamAttachment: ...
+
+
+class SaveOpportunityFeedbackRequest(BaseModel):
+    rating: FeedbackRating
+    reason: str | None = Field(default=None, max_length=1000)
 
 
 def configure_sam_attachment_downloader(
@@ -817,6 +823,40 @@ def list_opportunities(
             item.response_deadline or date.max,
             item.title.casefold(),
         ),
+    )
+
+
+@router.get("/opportunities/{opportunity_id}/feedback", response_model=OpportunityFeedback)
+def get_opportunity_feedback(
+    opportunity_id: UUID,
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> OpportunityFeedback:
+    organization_id = identity.organization.id
+    if _store.get_opportunity(opportunity_id, organization_id) is None:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+    feedback = _store.get_opportunity_feedback(opportunity_id, organization_id)
+    if feedback is None:
+        raise HTTPException(status_code=404, detail="Opportunity feedback not found")
+    return feedback
+
+
+@router.put("/opportunities/{opportunity_id}/feedback", response_model=OpportunityFeedback)
+def save_opportunity_feedback(
+    opportunity_id: UUID,
+    request: SaveOpportunityFeedbackRequest,
+    identity: Annotated[AuthIdentity, Depends(get_current_identity)],
+) -> OpportunityFeedback:
+    organization_id = identity.organization.id
+    if _store.get_opportunity(opportunity_id, organization_id) is None:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+    return _store.save_opportunity_feedback(
+        OpportunityFeedback(
+            organization_id=organization_id,
+            opportunity_id=opportunity_id,
+            rating=request.rating,
+            reason=request.reason,
+            submitted_by_user_id=identity.user.id,
+        )
     )
 
 

@@ -215,6 +215,32 @@ class OpportunityRecord(Base):
     )
 
 
+class OpportunityFeedbackRecord(Base):
+    __tablename__ = "opportunity_feedback"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "opportunity_id",
+            name="uq_opportunity_feedback_organization_opportunity",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    organization_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id", ondelete="CASCADE"), index=True
+    )
+    opportunity_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("opportunities.id", ondelete="CASCADE"), index=True
+    )
+    rating: Mapped[str] = mapped_column(String(50))
+    reason: Mapped[str | None] = mapped_column(Text)
+    submitted_by_user_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("user_accounts.id", ondelete="RESTRICT"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
 class PipelineItemRecord(Base):
     __tablename__ = "pipeline_items"
     __table_args__ = (

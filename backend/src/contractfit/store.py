@@ -16,6 +16,7 @@ from contractfit.domain import (
     SourceDocument,
 )
 from contractfit.embeddings import EmbeddingHit, EmbeddingTarget, SemanticEmbedding
+from contractfit.feedback import OpportunityFeedback
 from contractfit.notifications import DeliveryStatus, NotificationDelivery, NotificationPreference
 from contractfit.pipeline import PipelineItem
 from contractfit.review import (
@@ -80,6 +81,12 @@ class ContractFitStore(Protocol):
     ) -> Opportunity | None: ...
     def get_opportunity_by_source(self, source: str, source_id: str) -> Opportunity | None: ...
     def list_opportunities(self, organization_id: UUID | None = None) -> list[Opportunity]: ...
+    def get_opportunity_feedback(
+        self, opportunity_id: UUID, organization_id: UUID
+    ) -> OpportunityFeedback | None: ...
+    def save_opportunity_feedback(
+        self, feedback: OpportunityFeedback
+    ) -> OpportunityFeedback: ...
     def save_pipeline_item(self, item: PipelineItem) -> PipelineItem: ...
     def get_pipeline_item(self, item_id: UUID, organization_id: UUID) -> PipelineItem | None: ...
     def get_pipeline_item_by_opportunity(
@@ -190,6 +197,7 @@ class InMemoryStore:
         self.document_pages: dict[UUID, list[DocumentPage]] = {}
         self.processing_jobs: dict[UUID, ProcessingJob] = {}
         self.opportunities: dict[UUID, Opportunity] = {}
+        self.opportunity_feedback: dict[tuple[UUID, UUID], OpportunityFeedback] = {}
         self.pipeline_items: dict[UUID, PipelineItem] = {}
         self.compliance_items: dict[UUID, ComplianceItem] = {}
         self.amendment_acknowledgements: dict[UUID, AmendmentAcknowledgement] = {}
@@ -212,6 +220,7 @@ class InMemoryStore:
         self.document_pages.clear()
         self.processing_jobs.clear()
         self.opportunities.clear()
+        self.opportunity_feedback.clear()
         self.pipeline_items.clear()
         self.compliance_items.clear()
         self.amendment_acknowledgements.clear()
@@ -410,6 +419,21 @@ class InMemoryStore:
             if item.document_id is None
             or self.get_document(item.document_id, organization_id) is not None
         ]
+
+    def get_opportunity_feedback(
+        self, opportunity_id: UUID, organization_id: UUID
+    ) -> OpportunityFeedback | None:
+        return self.opportunity_feedback.get((organization_id, opportunity_id))
+
+    def save_opportunity_feedback(self, feedback: OpportunityFeedback) -> OpportunityFeedback:
+        key = (feedback.organization_id, feedback.opportunity_id)
+        existing = self.opportunity_feedback.get(key)
+        if existing is not None:
+            feedback = feedback.model_copy(
+                update={"id": existing.id, "created_at": existing.created_at}
+            )
+        self.opportunity_feedback[key] = feedback
+        return feedback
 
     def save_pipeline_item(self, item: PipelineItem) -> PipelineItem:
         if self.get_opportunity(item.opportunity_id, item.organization_id) is None:

@@ -93,3 +93,21 @@ def test_dashboard_exposes_synthetic_company_switcher_and_disclosure() -> None:
     assert "demo+electrical@contractfit.local" in dashboard
     assert "demo+plumbing@contractfit.local" in dashboard
     assert "All demo companies and opportunities are synthetic" in dashboard
+
+
+def test_dashboard_exposes_accessible_relevance_feedback_controls() -> None:
+    dashboard = (
+        Path(__file__).parents[1] / "src" / "contractfit" / "static" / "index.html"
+    ).read_text(encoding="utf-8")
+
+    assert 'data-feedback-form="${esc(opportunity.id)}"' in dashboard
+    assert 'name="rating" value="relevant" required' in dashboard
+    assert 'name="rating" value="not_relevant"' in dashboard
+    assert 'name="rating" value="unsure"' in dashboard
+    assert 'name="reason" maxlength="1000"' in dashboard
+    assert 'data-feedback-status role="status" aria-live="polite"' in dashboard
+    assert "if(response.status===404){status.textContent='No feedback saved yet.'" in dashboard
+    assert "/feedback`,{method:'PUT'" in dashboard
+    assert "status.textContent='Saving feedback…'" in dashboard
+    assert "status.dataset.kind='error'" in dashboard
+    assert "document.querySelector('#matches').addEventListener('submit',saveOpportunityFeedback)" in dashboard

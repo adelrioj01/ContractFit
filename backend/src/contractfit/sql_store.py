@@ -36,6 +36,7 @@ from contractfit.domain import (
     SourceDocument,
 )
 from contractfit.embeddings import EmbeddingHit, EmbeddingTarget, SemanticEmbedding
+from contractfit.feedback import FeedbackRating, OpportunityFeedback
 from contractfit.notifications import DeliveryStatus, NotificationDelivery, NotificationPreference
 from contractfit.persistence_models import (
     AmendmentAcknowledgementRecord,
@@ -46,6 +47,7 @@ from contractfit.persistence_models import (
     NotificationDeliveryRecord,
     NotificationPreferenceRecord,
     OpportunityAlertRecord,
+    OpportunityFeedbackRecord,
     OpportunityRecord,
     OpportunityWatchRecord,
     OrganizationMembershipRecord,
@@ -87,6 +89,7 @@ class SqlAlchemyStore:
 
     def reset(self) -> None:
         with transaction(self.session_factory) as session:
+            session.execute(delete(OpportunityFeedbackRecord))
             session.execute(delete(AmendmentAcknowledgementRecord))
             session.execute(delete(ComplianceItemRecord))
             session.execute(delete(SemanticEmbeddingRecord))
@@ -363,6 +366,60 @@ class SqlAlchemyStore:
                 )
             record = session.scalars(statement).unique().first()
             return self._opportunity_from_record(record) if record else None
+
+    def get_opportunity_feedback(
+        self, opportunity_id: UUID, organization_id: UUID
+    ) -> OpportunityFeedback | None:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(OpportunityFeedbackRecord).where(
+                    OpportunityFeedbackRecord.opportunity_id == opportunity_id,
+                    OpportunityFeedbackRecord.organization_id == organization_id,
+                )
+            ).first()
+            if record is None:
+                return None
+            return OpportunityFeedback(
+                id=record.id,
+                organization_id=record.organization_id,
+                opportunity_id=record.opportunity_id,
+                rating=FeedbackRating(record.rating),
+                reason=record.reason,
+                submitted_by_user_id=record.submitted_by_user_id,
+                created_at=_ensure_aware(record.created_at),
+                updated_at=_ensure_aware(record.updated_at),
+            )
+
+    def save_opportunity_feedback(self, feedback: OpportunityFeedback) -> OpportunityFeedback:
+        try:
+            with transaction(self.session_factory) as session:
+                record = session.scalars(
+                    select(OpportunityFeedbackRecord).where(
+                        OpportunityFeedbackRecord.opportunity_id == feedback.opportunity_id,
+                        OpportunityFeedbackRecord.organization_id == feedback.organization_id,
+                    )
+                ).first()
+                if record is None:
+                    record = OpportunityFeedbackRecord(
+                        **feedback.model_dump(exclude={"rating"}), rating=feedback.rating.value
+                    )
+                    session.add(record)
+                else:
+                    feedback = feedback.model_copy(
+                        update={"id": record.id, "created_at": _ensure_aware(record.created_at)}
+                    )
+                    record.rating = feedback.rating.value
+                    record.reason = feedback.reason
+                    record.submitted_by_user_id = feedback.submitted_by_user_id
+                    record.updated_at = feedback.updated_at
+        except IntegrityError:
+            existing = self.get_opportunity_feedback(
+                feedback.opportunity_id, feedback.organization_id
+            )
+            if existing is not None:
+                return existing
+            raise
+        return feedback
 
     def get_opportunity_by_source(self, source: str, source_id: str) -> Opportunity | None:
         with transaction(self.session_factory) as session:
