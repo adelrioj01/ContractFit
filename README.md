@@ -172,6 +172,8 @@ Do not upload customer or confidential documents to the public demo dataset. Rea
 ## Honest limitations
 
 - Bundled evaluation data are synthetic and too small for a production-accuracy claim.
+- Request logs expose trace IDs, status and local duration; centralized metrics and alerting still
+  depend on the eventual hosting platform.
 - The current extractor is deterministic; the instruction-text suite is not an LLM prompt-injection
   evaluation.
 - Ollama scoring and embeddings are optional and have not been benchmarked across providers here.

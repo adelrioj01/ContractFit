@@ -24,6 +24,7 @@ test links are repository-relative so claims can be audited from the current che
 | Organization-owned relevance feedback | `feedback.py`, `api.py`, `sql_store.py` | `test_feedback_api.py`, `test_feedback_postgres.py`, `test_dashboard_static.py` |
 | Quality and ranking evaluation | `quality_cli.py`, `ranking_cli.py`, `evaluation.py` | `test_quality_cli.py`, `test_ranking_cli.py` |
 | Tenant-aware persistence | `store.py`, `sql_store.py`, migrations | `test_sql_store.py`, document tenant and auth tests |
+| HTTP request tracing | `main.py` request middleware | `test_health.py` trace ID and structured completion log |
 
 ## Implemented but experimental
 

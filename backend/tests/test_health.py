@@ -1,5 +1,6 @@
 import pytest
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
 from contractfit.api import (
     DEMO_EMAIL,
@@ -25,6 +26,23 @@ from contractfit.store import InMemoryStore
 def test_health() -> None:
     assert health()["status"] == "ok"
     assert "/health" in app.openapi()["paths"]
+
+
+def test_requests_include_trace_id_and_structured_completion_log(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    request_id = "portfolio-observability-test"
+    with caplog.at_level("INFO", logger="contractfit.main"):
+        response = TestClient(app).get("/health", headers={"X-Request-ID": request_id})
+
+    assert response.status_code == 200
+    assert response.headers["X-Request-ID"] == request_id
+    record = next(record for record in caplog.records if record.message == "request_completed")
+    assert record.request_id == request_id
+    assert record.method == "GET"
+    assert record.path == "/health"
+    assert record.status_code == 200
+    assert record.duration_ms >= 0
 
 
 def test_demo_vertical_slice() -> None:

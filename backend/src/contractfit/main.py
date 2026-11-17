@@ -1,8 +1,11 @@
-from collections.abc import AsyncIterator
+import logging
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
+from time import perf_counter
+from uuid import uuid4
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import FileResponse
 
 from contractfit.api import (
@@ -21,6 +24,7 @@ from contractfit.sample_data import SAMPLE_PROFILE
 from contractfit.sql_store import SqlAlchemyStore
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -48,6 +52,35 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.include_router(router)
+
+
+@app.middleware("http")
+async def log_request(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    request_id = request.headers.get("x-request-id") or str(uuid4())
+    started = perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception(
+            "request_failed",
+            extra={"request_id": request_id, "method": request.method, "path": request.url.path},
+        )
+        raise
+    duration_ms = round((perf_counter() - started) * 1000, 3)
+    response.headers["X-Request-ID"] = request_id
+    logger.info(
+        "request_completed",
+        extra={
+            "request_id": request_id,
+            "method": request.method,
+            "path": request.url.path,
+            "status_code": response.status_code,
+            "duration_ms": duration_ms,
+        },
+    )
+    return response
 
 
 @app.get("/health", tags=["system"])
