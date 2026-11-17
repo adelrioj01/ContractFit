@@ -19,7 +19,12 @@ from contractfit.auth import (
     OrganizationRole,
     UserAccount,
 )
-from contractfit.compliance import ComplianceItem, ComplianceStatus, RequirementPriority
+from contractfit.compliance import (
+    BusinessEvidence,
+    ComplianceItem,
+    ComplianceStatus,
+    RequirementPriority,
+)
 from contractfit.database import build_engine, build_session_factory
 from contractfit.domain import Evidence, Opportunity, Requirement, SourceDocument
 from contractfit.sam_models import SamOpportunitySnapshot
@@ -122,6 +127,9 @@ def test_concurrent_identical_amendment_acknowledgements_return_one_winner() -> 
             priority=RequirementPriority.MANDATORY,
             status=ComplianceStatus.COVERED,
             source_evidence=previous_requirement.evidence,
+            business_evidence=[
+                BusinessEvidence(kind="project", description="Synthetic verified delivery plan")
+            ],
             notes="must survive the partial update",
         )
     )
@@ -170,6 +178,9 @@ def test_concurrent_identical_amendment_acknowledgements_return_one_winner() -> 
     }
     assert items[previous_requirement.id].status is ComplianceStatus.NOT_APPLICABLE
     assert items[previous_requirement.id].notes == "must survive the partial update"
+    assert items[previous_requirement.id].business_evidence == [
+        BusinessEvidence(kind="project", description="Synthetic verified delivery plan")
+    ]
     assert items[current_requirement.id].status is ComplianceStatus.PENDING
 
     third_snapshot = store.save_sam_snapshot(

@@ -112,7 +112,7 @@ an isolated empty pgvector/Postgres 17 database in an environment with Docker an
 sockets. Verify migration head 0018, `$PORT`, `/health`, dashboard, login, a synthetic upload,
 organization isolation and upload persistence across a container recreation. Do not use local
 `.env` or existing customer volumes for these checks. No resources were provisioned, no secrets
-were transmitted, and changes remain local until reviewed/published.
+were transmitted during local checks. Subsequent CI results are recorded below.
 
 ## Reproducible container verification
 
@@ -130,3 +130,19 @@ the official schema. Pushes to `codex/sam-sync-v1` trigger these checks; no Rend
 is triggered (`autoDeployTrigger: "off"`). A passing CI run must be observed before calling
 these pending checks successful. The job definition and successful static checks alone are
 not evidence of a working image or persistence.
+
+
+## CI execution evidence
+
+[CI run 36](https://github.com/adelrioj01/ContractFit/actions/runs/44185973561),
+commit `6dd4a0a`, completed the full general suite on Linux: **261 passed, 3 skipped**.
+Schema validation, Ruff, Mypy, real PostgreSQL migrations/schema drift and pgvector search
+passed. The separate container job passed image build, head 0018, schema drift, port 10000,
+dashboard/login, inline synthetic upload, organization isolation and persistence after API
+container recreation with the 512 MB API / 256 MB database limits.
+
+The backend job then found invalid setup in the existing amendment concurrency test: its
+`COVERED` requirement lacked mandatory business evidence. The test fixture now supplies
+synthetic business evidence and asserts it survives the concurrent update. Product rules and
+race assertions are unchanged. The corrected integration test and subsequent feedback/quality
+steps must pass on the follow-up CI run before deployment approval.
