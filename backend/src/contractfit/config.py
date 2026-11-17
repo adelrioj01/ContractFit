@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -25,12 +25,29 @@ class Settings(BaseSettings):
     processing_queue_name: str = "contractfit:document-jobs"
     ocr_backend: Literal["disabled", "tesseract"] = "disabled"
     tesseract_command: str = "tesseract"
-    auth_secret_key: str = Field(
-        default="development-only-change-me-32-bytes", min_length=32
-    )
+    auth_secret_key: str = Field(default="development-only-change-me-32-bytes", min_length=32)
     auth_access_token_minutes: int = Field(default=60, ge=1, le=1440)
+    sam_api_key: str | None = None
+    sam_sync_enabled: bool = False
+    sam_sync_interval_minutes: int = Field(default=360, ge=5, le=10080)
+    sam_lookback_days: int = Field(default=7, ge=1, le=365)
+    sam_page_size: int = Field(default=100, ge=1, le=1000)
+    sam_request_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
+    notification_poll_seconds: int = Field(default=60, ge=10, le=3600)
+    notification_send_enabled: bool = False
+    smtp_host: str | None = None
+    smtp_port: int = Field(default=1025, ge=1, le=65535)
+    notification_from_email: str = "notifications@contractfit.local"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def use_psycopg_for_postgres(cls, value: str) -> str:
+        for prefix in ("postgres://", "postgresql://"):
+            if value.startswith(prefix):
+                return "postgresql+psycopg://" + value[len(prefix):]
+        return value
 
     @model_validator(mode="after")
     def production_requires_private_auth_secret(self) -> "Settings":
@@ -41,6 +58,8 @@ class Settings(BaseSettings):
             raise ValueError("production requires a private AUTH_SECRET_KEY")
         if self.embedding_provider == "ollama" and self.embedding_dimensions != 768:
             raise ValueError("the current pgvector schema requires 768-dimensional embeddings")
+        if self.sam_sync_enabled and not (self.sam_api_key and self.sam_api_key.strip()):
+            raise ValueError("SAM_SYNC_ENABLED requires a non-empty SAM_API_KEY")
         return self
 
 

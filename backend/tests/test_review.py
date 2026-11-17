@@ -232,3 +232,53 @@ def test_review_builder_validates_threshold() -> None:
     with pytest.raises(ValueError, match="confidence_threshold"):
         build_requirement_reviews(opportunity, uuid4(), confidence_threshold=1.1)
 
+
+@pytest.mark.parametrize(
+    ("category", "field_name", "values"),
+    [
+        ("deadline", "opportunity:response_deadline", ("2099-02-15", "2099-03-01")),
+        ("location", "opportunity:place_of_performance", ("Austin, TX", "Dallas, TX")),
+        ("set_aside", "opportunity:set_aside", ("Small Business", "8(a)")),
+        ("value", "opportunity:estimated_value", ("100000", "200000")),
+    ],
+)
+def test_scalar_conflict_becomes_one_grouped_review_without_duplicate_low_confidence(
+    category: str,
+    field_name: str,
+    values: tuple[str, str],
+) -> None:
+    organization_id = uuid4()
+    document_id = uuid4()
+    requirements = [
+        Requirement(
+            category=category,
+            description=value,
+            mandatory=True,
+            confidence=0.5,
+            evidence=Evidence(
+                document_id=document_id,
+                page=index,
+                supporting_text=f"Candidate {value}",
+            ),
+        )
+        for index, value in enumerate(values, start=1)
+    ]
+    opportunity = Opportunity(
+        source="upload",
+        source_id=f"grouped-{category}",
+        title="Conflicting scalar",
+        document_id=document_id,
+        requirements=requirements,
+    )
+
+    items = build_requirement_reviews(opportunity, organization_id)
+
+    assert len(items) == 1
+    assert items[0].field_name == field_name
+    assert items[0].reason is ReviewReason.CONFLICTING_VALUES
+    assert [evidence.page for evidence in items[0].evidence] == [1, 2]
+    assert [evidence.supporting_text for evidence in items[0].evidence] == [
+        f"Candidate {value}" for value in values
+    ]
+    assert all(item.reason is not ReviewReason.LOW_CONFIDENCE for item in items)
+

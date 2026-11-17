@@ -3,14 +3,16 @@ from pathlib import Path
 from contractfit.domain import (
     DocumentPage,
     DocumentStatus,
+    Evidence,
     Opportunity,
     ProcessingJob,
     ProcessingJobStatus,
+    Requirement,
     SourceDocument,
 )
 from contractfit.extraction import RequirementExtractor
 from contractfit.file_storage import LocalFileStorage
-from contractfit.processing import DocumentProcessor
+from contractfit.processing import DocumentProcessor, refresh_requirement_reviews
 from contractfit.sample_data import SAMPLE_PROFILE
 from contractfit.store import InMemoryStore
 
@@ -132,3 +134,57 @@ def test_processor_creates_review_for_low_confidence_requirement(tmp_path: Path)
     assert len(reviews) == 1
     assert reviews[0].opportunity_id == store.list_opportunities()[0].id
     assert reviews[0].evidence[0].document_id == document.id
+
+
+def test_refresh_requirement_reviews_replaces_stale_pending_conflict() -> None:
+    store = InMemoryStore()
+    document = store.save_document(
+        SourceDocument(
+            organization_id=SAMPLE_PROFILE.organization_id,
+            filename="deadline.txt",
+            content="deadlines",
+        )
+    )
+
+    def requirements(prefix: str) -> list[Requirement]:
+        return [
+            Requirement(
+                category="deadline",
+                description=value,
+                mandatory=True,
+                confidence=0.5,
+                evidence=Evidence(
+                    document_id=document.id,
+                    page=index,
+                    supporting_text=f"{prefix} {value}",
+                ),
+            )
+            for index, value in enumerate(("2099-02-15", "2099-03-01"), start=1)
+        ]
+
+    opportunity = store.save_opportunity(
+        Opportunity(
+            source="upload",
+            source_id="refresh-conflict",
+            title="Conflict",
+            document_id=document.id,
+            requirements=requirements("original"),
+        )
+    )
+    refresh_requirement_reviews(store, opportunity, SAMPLE_PROFILE.organization_id)
+    original = store.list_review_items(SAMPLE_PROFILE.organization_id)[0]
+
+    refreshed_opportunity = opportunity.model_copy(
+        update={"requirements": requirements("amended")}
+    )
+    store.save_opportunity(refreshed_opportunity)
+    refresh_requirement_reviews(
+        store, refreshed_opportunity, SAMPLE_PROFILE.organization_id
+    )
+
+    refreshed = store.list_review_items(SAMPLE_PROFILE.organization_id)[0]
+    assert refreshed.id == original.id
+    assert [item.supporting_text for item in refreshed.evidence] == [
+        "amended 2099-02-15",
+        "amended 2099-03-01",
+    ]

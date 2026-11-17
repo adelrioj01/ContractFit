@@ -1,0 +1,17 @@
+flowchart LR
+    B[Browser dashboard] --> API[FastAPI API]
+    API --> DB[(PostgreSQL + pgvector)]
+    API --> Q[(Redis)]
+    API --> FS[(Hash-addressed files)]
+    Q --> W[Document worker]
+    W --> FS
+    W --> OCR[Local Tesseract OCR]
+    W --> DB
+    API --> OL[Optional Ollama]
+    OL --> API
+    SAM[SAM.gov API] --> SI[SAM ingester]
+    SI --> DB
+    SI --> FS
+    DB --> NW[Notification worker]
+    NW --> SMTP[Optional SMTP]
+    API --> HR[Human review and compliance workflow]

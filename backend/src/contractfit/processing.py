@@ -7,6 +7,7 @@ from contractfit.document_parser import DocumentParser
 from contractfit.domain import (
     DocumentPage,
     DocumentStatus,
+    Opportunity,
     ProcessingJob,
     ProcessingJobStatus,
     ProcessingStage,
@@ -14,12 +15,46 @@ from contractfit.domain import (
 from contractfit.extraction import RequirementExtractor
 from contractfit.file_storage import LocalFileStorage
 from contractfit.ocr import DocumentOcrProcessor, OcrError
-from contractfit.review import build_requirement_reviews
+from contractfit.review import ReviewStatus, build_requirement_reviews
 from contractfit.store import ContractFitStore
 
 
 class ProcessingError(RuntimeError):
     """Raised when a requested processing job or document does not exist."""
+
+
+def refresh_requirement_reviews(
+    store: ContractFitStore,
+    opportunity: Opportunity,
+    organization_id: UUID,
+) -> None:
+    """Create current reviews and replace pending reviews made stale by re-extraction."""
+    existing_reviews = {
+        item.field_name: item
+        for item in store.list_review_items(
+            organization_id,
+            opportunity_id=opportunity.id,
+        )
+    }
+    for review in build_requirement_reviews(opportunity, organization_id):
+        existing_review = existing_reviews.get(review.field_name)
+        if existing_review is None:
+            store.save_review_item(review)
+        elif (
+            existing_review.status is ReviewStatus.PENDING
+            and (
+                existing_review.extracted_value != review.extracted_value
+                or existing_review.evidence != review.evidence
+            )
+        ):
+            store.save_review_item(
+                review.model_copy(
+                    update={
+                        "id": existing_review.id,
+                        "created_at": existing_review.created_at,
+                    }
+                )
+            )
 
 
 class DocumentProcessor:
@@ -122,18 +157,9 @@ class DocumentProcessor:
                 self.store.save_opportunity(opportunity)
                 profile = self.store.get_profile(document.organization_id)
                 if profile is not None:
-                    existing_fields = {
-                        item.field_name
-                        for item in self.store.list_review_items(
-                            profile.organization_id,
-                            opportunity_id=opportunity.id,
-                        )
-                    }
-                    for review in build_requirement_reviews(
-                        opportunity, profile.organization_id
-                    ):
-                        if review.field_name not in existing_fields:
-                            self.store.save_review_item(review)
+                    refresh_requirement_reviews(
+                        self.store, opportunity, profile.organization_id
+                    )
 
             return self._save_job(
                 job,

@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal, InvalidOperation
 
 import httpx
 
@@ -29,6 +30,7 @@ class OpportunityMatcher:
             self._set_aside_gate(profile, opportunity),
             self._certification_gate(profile, opportunity),
             self._value_gate(profile, opportunity),
+            self._past_performance_gate(profile, opportunity),
         ]
         if any(gate.status == EligibilityStatus.INELIGIBLE for gate in gates):
             eligibility = EligibilityStatus.INELIGIBLE
@@ -48,6 +50,7 @@ class OpportunityMatcher:
             score = min(score, 39.0)
         strengths = [g.reason for g in gates if g.status == EligibilityStatus.ELIGIBLE]
         gaps = [g.reason for g in gates if g.status != EligibilityStatus.ELIGIBLE]
+        evidence_summary = self._evidence_summary(gates)
         return MatchResult(
             opportunity_id=opportunity.id,
             profile_id=profile.id,
@@ -57,8 +60,27 @@ class OpportunityMatcher:
             gates=gates,
             strengths=strengths,
             gaps=gaps,
-            explanation=f"{semantic_reason} Hard-gate result: {eligibility.value}.",
+            explanation=(
+                f"{semantic_reason} Hard-gate result: {eligibility.value}."
+                f"{evidence_summary}"
+            ),
         )
+
+    @staticmethod
+    def _evidence_summary(gates: list[GateResult]) -> str:
+        citations = []
+        for gate in gates:
+            if gate.evidence is None:
+                continue
+            location = f"document {gate.evidence.document_id}"
+            if gate.evidence.page is not None:
+                location += f", page {gate.evidence.page}"
+            elif gate.evidence.section:
+                location += f", {gate.evidence.section}"
+            citations.append(
+                f'{gate.name} [{location}]: "{gate.evidence.supporting_text}"'
+            )
+        return f" Evidence: {'; '.join(citations)}" if citations else ""
 
     def _semantic_score(
         self, profile: CompanyProfile, opportunity: Opportunity
@@ -77,8 +99,39 @@ class OpportunityMatcher:
         return semantic_score, semantic_reason, method
 
     @staticmethod
-    def _evidence(opportunity: Opportunity, category: str) -> Evidence | None:
-        return next((r.evidence for r in opportunity.requirements if r.category == category), None)
+    def _evidence(
+        opportunity: Opportunity, category: str, evaluated_value: object | None
+    ) -> Evidence | None:
+        if evaluated_value is None:
+            return None
+        for requirement in opportunity.requirements:
+            if requirement.category != category:
+                continue
+            if OpportunityMatcher._requirement_matches_value(
+                category, requirement.description, evaluated_value
+            ):
+                return requirement.evidence
+        return None
+
+    @staticmethod
+    def _requirement_matches_value(
+        category: str, requirement_value: str, evaluated_value: object
+    ) -> bool:
+        if category == "value":
+            try:
+                return Decimal(requirement_value.replace(",", "")) == Decimal(
+                    str(evaluated_value)
+                )
+            except InvalidOperation:
+                return False
+        expected = (
+            evaluated_value.isoformat()
+            if isinstance(evaluated_value, date)
+            else str(evaluated_value)
+        )
+        return " ".join(requirement_value.casefold().split()) == " ".join(
+            expected.casefold().split()
+        )
 
     def _deadline_gate(self, opportunity: Opportunity) -> GateResult:
         if opportunity.response_deadline is None:
@@ -96,7 +149,7 @@ class OpportunityMatcher:
             name="deadline",
             status=status,
             reason=f"Deadline is {opportunity.response_deadline.isoformat()}.",
-            evidence=self._evidence(opportunity, "deadline"),
+            evidence=self._evidence(opportunity, "deadline", opportunity.response_deadline),
         )
 
     def _location_gate(self, profile: CompanyProfile, opportunity: Opportunity) -> GateResult:
@@ -113,7 +166,7 @@ class OpportunityMatcher:
             name="location",
             status=EligibilityStatus.ELIGIBLE if supported else EligibilityStatus.INELIGIBLE,
             reason=f"Location {'is' if supported else 'is not'} in the service territory.",
-            evidence=self._evidence(opportunity, "location"),
+            evidence=self._evidence(opportunity, "location", opportunity.place_of_performance),
         )
 
     def _set_aside_gate(self, profile: CompanyProfile, opportunity: Opportunity) -> GateResult:
@@ -128,7 +181,7 @@ class OpportunityMatcher:
             name="set_aside",
             status=EligibilityStatus.ELIGIBLE if supported else EligibilityStatus.INELIGIBLE,
             reason=f"Set-aside {'matches' if supported else 'does not match'} the company profile.",
-            evidence=self._evidence(opportunity, "set_aside"),
+            evidence=self._evidence(opportunity, "set_aside", opportunity.set_aside),
         )
 
     def _certification_gate(self, profile: CompanyProfile, opportunity: Opportunity) -> GateResult:
@@ -143,13 +196,16 @@ class OpportunityMatcher:
             )
         held = {item.lower() for item in profile.certifications}
         missing = [item for item in required if item.lower() not in held]
+        evidenced_certification = missing[0] if missing else required[0]
         return GateResult(
             name="certification",
             status=EligibilityStatus.INELIGIBLE if missing else EligibilityStatus.ELIGIBLE,
             reason=f"Missing certifications: {', '.join(missing)}"
             if missing
             else "All required certifications are present.",
-            evidence=self._evidence(opportunity, "certification"),
+            evidence=self._evidence(
+                opportunity, "certification", evidenced_certification
+            ),
         )
 
     def _value_gate(self, profile: CompanyProfile, opportunity: Opportunity) -> GateResult:
@@ -171,5 +227,44 @@ class OpportunityMatcher:
             name="contract_value",
             status=EligibilityStatus.ELIGIBLE if within else EligibilityStatus.INELIGIBLE,
             reason=f"Estimated value ${value:,.0f} {'fits' if within else 'falls outside'} company capacity.",
-            evidence=self._evidence(opportunity, "value"),
+            evidence=self._evidence(opportunity, "value", value),
+        )
+
+    @staticmethod
+    def _past_performance_gate(
+        profile: CompanyProfile, opportunity: Opportunity
+    ) -> GateResult:
+        if not profile.past_performance:
+            return GateResult(
+                name="past_performance",
+                status=EligibilityStatus.NEEDS_REVIEW,
+                reason="Past performance has not been demonstrated in the company profile.",
+            )
+        scope_tokens = {
+            token.strip(".,:;()[]").casefold()
+            for token in opportunity.scope.split()
+            if len(token.strip(".,:;()[]")) >= 4
+        }
+        ranked_projects: list[tuple[int, str]] = []
+        for project in profile.past_performance:
+            evidence_text = " ".join(
+                [project.title, project.description, *project.service_categories]
+            )
+            project_tokens = {
+                token.strip(".,:;()[]").casefold()
+                for token in evidence_text.split()
+                if len(token.strip(".,:;()[]")) >= 4
+            }
+            ranked_projects.append((len(scope_tokens & project_tokens), project.title))
+        overlap, title = max(ranked_projects)
+        if overlap == 0:
+            return GateResult(
+                name="past_performance",
+                status=EligibilityStatus.NEEDS_REVIEW,
+                reason="Past projects are recorded, but no directly relevant experience was found.",
+            )
+        return GateResult(
+            name="past_performance",
+            status=EligibilityStatus.ELIGIBLE,
+            reason=f'Profile project "{title}" supports relevant experience.',
         )

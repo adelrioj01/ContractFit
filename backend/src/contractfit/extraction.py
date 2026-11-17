@@ -7,6 +7,13 @@ from uuid import uuid4
 from contractfit.domain import DocumentPage, Evidence, Opportunity, Requirement, SourceDocument
 
 
+def normalize_scalar_requirement(category: str, value: str) -> str:
+    """Normalize an extracted scalar for deterministic conflict comparison."""
+    if category == "value":
+        return str(Decimal(value.removeprefix("$").replace(",", "")))
+    return " ".join(value.casefold().split())
+
+
 class RequirementExtractor:
     """Evidence-preserving baseline extractor used locally and in evaluation."""
 
@@ -29,7 +36,7 @@ class RequirementExtractor:
         source_id: str,
         pages: list[DocumentPage] | None = None,
     ) -> Opportunity:
-        matches: dict[str, tuple[str, str]] = {}
+        matches: dict[str, list[tuple[str, str]]] = {}
         requirements: list[Requirement] = []
 
         page_inputs: list[tuple[int | None, str]] = (
@@ -45,7 +52,7 @@ class RequirementExtractor:
                     if not match:
                         continue
                     value = match.group(1).strip()
-                    matches[category] = (value, line)
+                    matches.setdefault(category, []).append((value, line))
                     if category in {
                         "deadline",
                         "location",
@@ -68,20 +75,56 @@ class RequirementExtractor:
                             )
                         )
 
-        title = matches.get("title", (document.filename, ""))[0]
-        deadline_value = matches.get("deadline", (None, ""))[0]
-        value_text = matches.get("value", (None, ""))[0]
+        scalar_categories = {"deadline", "location", "set_aside", "value"}
+        conflicting_categories = {
+            category
+            for category in scalar_categories
+            if len(
+                {
+                    normalize_scalar_requirement(category, value)
+                    for value, _ in matches.get(category, [])
+                }
+            )
+            > 1
+        }
+        requirements = [
+            requirement.model_copy(update={"confidence": 0.5})
+            if requirement.category in conflicting_categories
+            else requirement
+            for requirement in requirements
+        ]
+
+        title = self._latest_value(matches, "title") or document.filename
+        deadline_value = self._resolved_scalar(matches, "deadline")
+        value_text = self._resolved_scalar(matches, "value")
         return Opportunity(
             id=uuid4(),
             source="uploaded_document",
             source_id=source_id,
             title=title,
-            agency=matches.get("agency", (None, ""))[0],
+            agency=self._latest_value(matches, "agency"),
             response_deadline=date.fromisoformat(deadline_value) if deadline_value else None,
-            place_of_performance=matches.get("location", (None, ""))[0],
-            set_aside=matches.get("set_aside", (None, ""))[0],
+            place_of_performance=self._resolved_scalar(matches, "location"),
+            set_aside=self._resolved_scalar(matches, "set_aside"),
             estimated_value=Decimal(value_text.replace(",", "")) if value_text else None,
-            scope=matches.get("scope", ("", ""))[0],
+            scope=self._latest_value(matches, "scope") or "",
             document_id=document.id,
             requirements=requirements,
         )
+
+    @staticmethod
+    def _latest_value(
+        matches: dict[str, list[tuple[str, str]]], category: str
+    ) -> str | None:
+        values = matches.get(category, [])
+        return values[-1][0] if values else None
+
+    @classmethod
+    def _resolved_scalar(
+        cls, matches: dict[str, list[tuple[str, str]]], category: str
+    ) -> str | None:
+        values = matches.get(category, [])
+        if not values:
+            return None
+        normalized = {normalize_scalar_requirement(category, value) for value, _ in values}
+        return values[-1][0] if len(normalized) == 1 else None

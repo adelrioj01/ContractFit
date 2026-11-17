@@ -3,15 +3,23 @@ from typing import cast
 from uuid import UUID
 
 from sqlalchemy import delete, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.sql.elements import ColumnElement
 
+from contractfit.amendments import AmendmentAcknowledgement, AmendmentSelection
 from contractfit.auth import (
     AuthIdentity,
     Organization,
     OrganizationMembership,
     OrganizationRole,
     UserAccount,
+)
+from contractfit.compliance import (
+    BusinessEvidence,
+    ComplianceItem,
+    ComplianceStatus,
+    RequirementPriority,
 )
 from contractfit.database import transaction
 from contractfit.domain import (
@@ -20,6 +28,7 @@ from contractfit.domain import (
     DocumentStatus,
     Evidence,
     Opportunity,
+    PastPerformanceProject,
     ProcessingJob,
     ProcessingJobStatus,
     ProcessingStage,
@@ -27,21 +36,47 @@ from contractfit.domain import (
     SourceDocument,
 )
 from contractfit.embeddings import EmbeddingHit, EmbeddingTarget, SemanticEmbedding
+from contractfit.feedback import FeedbackRating, OpportunityFeedback
+from contractfit.notifications import DeliveryStatus, NotificationDelivery, NotificationPreference
 from contractfit.persistence_models import (
+    AmendmentAcknowledgementRecord,
     CompanyProfileRecord,
+    ComplianceItemRecord,
+    DocumentOriginRecord,
     DocumentPageRecord,
+    NotificationDeliveryRecord,
+    NotificationPreferenceRecord,
+    OpportunityAlertRecord,
+    OpportunityFeedbackRecord,
     OpportunityRecord,
+    OpportunityWatchRecord,
     OrganizationMembershipRecord,
     OrganizationRecord,
+    PipelineItemRecord,
     ProcessingJobRecord,
     RequirementRecord,
     ReviewEvidenceRecord,
     ReviewItemRecord,
+    SamIngestionRunRecord,
+    SamOpportunitySnapshotRecord,
     SemanticEmbeddingRecord,
     SourceDocumentRecord,
     UserAccountRecord,
 )
-from contractfit.review import ReviewItem, ReviewReason, ReviewStatus, review_sort_key
+from contractfit.pipeline import PipelineItem, PipelineStatus
+from contractfit.review import (
+    ReviewItem,
+    ReviewReason,
+    ReviewStatus,
+    resolve_conflicting_value,
+    review_sort_key,
+)
+from contractfit.sam_models import (
+    SamIngestionRun,
+    SamIngestionStatus,
+    SamOpportunitySnapshot,
+)
+from contractfit.watching import AlertStatus, AlertType, OpportunityAlert, OpportunityWatch
 
 
 def _ensure_aware(value: datetime) -> datetime:
@@ -54,9 +89,20 @@ class SqlAlchemyStore:
 
     def reset(self) -> None:
         with transaction(self.session_factory) as session:
+            session.execute(delete(OpportunityFeedbackRecord))
+            session.execute(delete(AmendmentAcknowledgementRecord))
+            session.execute(delete(ComplianceItemRecord))
             session.execute(delete(SemanticEmbeddingRecord))
             session.execute(delete(ReviewEvidenceRecord))
             session.execute(delete(ReviewItemRecord))
+            session.execute(delete(NotificationDeliveryRecord))
+            session.execute(delete(OpportunityAlertRecord))
+            session.execute(delete(NotificationPreferenceRecord))
+            session.execute(delete(OpportunityWatchRecord))
+            session.execute(delete(PipelineItemRecord))
+            session.execute(delete(DocumentOriginRecord))
+            session.execute(delete(SamOpportunitySnapshotRecord))
+            session.execute(delete(SamIngestionRunRecord))
             session.execute(delete(RequirementRecord))
             session.execute(delete(OpportunityRecord))
             session.execute(delete(ProcessingJobRecord))
@@ -71,15 +117,17 @@ class SqlAlchemyStore:
         with transaction(self.session_factory) as session:
             statement = select(CompanyProfileRecord)
             if organization_id is not None:
-                statement = statement.where(
-                    CompanyProfileRecord.organization_id == organization_id
-                )
+                statement = statement.where(CompanyProfileRecord.organization_id == organization_id)
             record = session.scalars(statement.limit(1)).first()
             return self._profile_from_record(record) if record else None
 
     def save_profile(self, profile: CompanyProfile) -> CompanyProfile:
         with transaction(self.session_factory) as session:
-            session.merge(CompanyProfileRecord(**profile.model_dump()))
+            payload = profile.model_dump()
+            payload["past_performance"] = [
+                project.model_dump(mode="json") for project in profile.past_performance
+            ]
+            session.merge(CompanyProfileRecord(**payload))
         return profile
 
     def save_document(self, document: SourceDocument) -> SourceDocument:
@@ -93,19 +141,13 @@ class SqlAlchemyStore:
         self, document_id: UUID, organization_id: UUID | None = None
     ) -> SourceDocument | None:
         with transaction(self.session_factory) as session:
-            statement = select(SourceDocumentRecord).where(
-                SourceDocumentRecord.id == document_id
-            )
+            statement = select(SourceDocumentRecord).where(SourceDocumentRecord.id == document_id)
             if organization_id is not None:
-                statement = statement.where(
-                    SourceDocumentRecord.organization_id == organization_id
-                )
+                statement = statement.where(SourceDocumentRecord.organization_id == organization_id)
             record = session.scalars(statement).first()
             return self._document_from_record(record) if record else None
 
-    def find_document_by_sha256(
-        self, sha256: str, organization_id: UUID
-    ) -> SourceDocument | None:
+    def find_document_by_sha256(self, sha256: str, organization_id: UUID) -> SourceDocument | None:
         with transaction(self.session_factory) as session:
             record = session.scalars(
                 select(SourceDocumentRecord).where(
@@ -115,6 +157,60 @@ class SqlAlchemyStore:
             ).first()
             return self._document_from_record(record) if record else None
 
+    def find_document_by_origin(
+        self,
+        origin_opportunity_id: UUID,
+        origin_url: str,
+        origin_snapshot_sha256: str,
+        organization_id: UUID,
+    ) -> SourceDocument | None:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(SourceDocumentRecord)
+                .join(
+                    DocumentOriginRecord,
+                    DocumentOriginRecord.document_id == SourceDocumentRecord.id,
+                )
+                .where(
+                    DocumentOriginRecord.opportunity_id == origin_opportunity_id,
+                    DocumentOriginRecord.origin_url == origin_url,
+                    DocumentOriginRecord.snapshot_sha256 == origin_snapshot_sha256,
+                    DocumentOriginRecord.organization_id == organization_id,
+                    SourceDocumentRecord.organization_id == organization_id,
+                )
+            ).first()
+            if record is None:
+                record = session.scalars(
+                    select(SourceDocumentRecord).where(
+                        SourceDocumentRecord.origin_opportunity_id == origin_opportunity_id,
+                        SourceDocumentRecord.origin_url == origin_url,
+                        SourceDocumentRecord.origin_snapshot_sha256 == origin_snapshot_sha256,
+                        SourceDocumentRecord.organization_id == organization_id,
+                    )
+                ).first()
+            return self._document_from_record(record) if record else None
+
+    def save_document_origin(
+        self,
+        document_id: UUID,
+        origin_opportunity_id: UUID,
+        origin_url: str,
+        origin_snapshot_sha256: str,
+        organization_id: UUID,
+    ) -> None:
+        if self.get_document(document_id, organization_id) is None:
+            raise ValueError("document is not visible to the organization")
+        with transaction(self.session_factory) as session:
+            session.merge(
+                DocumentOriginRecord(
+                    organization_id=organization_id,
+                    opportunity_id=origin_opportunity_id,
+                    origin_url=origin_url,
+                    snapshot_sha256=origin_snapshot_sha256,
+                    document_id=document_id,
+                )
+            )
+
     def list_documents(self, organization_id: UUID) -> list[SourceDocument]:
         with transaction(self.session_factory) as session:
             records = session.scalars(
@@ -122,6 +218,47 @@ class SqlAlchemyStore:
                     SourceDocumentRecord.organization_id == organization_id
                 )
             ).all()
+            return [self._document_from_record(record) for record in records]
+
+    def list_documents_by_origin(
+        self,
+        origin_opportunity_id: UUID,
+        origin_snapshot_sha256: str,
+        organization_id: UUID,
+    ) -> list[SourceDocument]:
+        with transaction(self.session_factory) as session:
+            records = (
+                session.scalars(
+                    select(SourceDocumentRecord)
+                    .outerjoin(
+                        DocumentOriginRecord,
+                        DocumentOriginRecord.document_id == SourceDocumentRecord.id,
+                    )
+                    .where(
+                        SourceDocumentRecord.organization_id == organization_id,
+                        or_(
+                            (
+                                (DocumentOriginRecord.organization_id == organization_id)
+                                & (DocumentOriginRecord.opportunity_id == origin_opportunity_id)
+                                & (DocumentOriginRecord.snapshot_sha256 == origin_snapshot_sha256)
+                            ),
+                            (
+                                (
+                                    SourceDocumentRecord.origin_opportunity_id
+                                    == origin_opportunity_id
+                                )
+                                & (
+                                    SourceDocumentRecord.origin_snapshot_sha256
+                                    == origin_snapshot_sha256
+                                )
+                            ),
+                        ),
+                    )
+                    .order_by(SourceDocumentRecord.filename, SourceDocumentRecord.id)
+                )
+                .unique()
+                .all()
+            )
             return [self._document_from_record(record) for record in records]
 
     def save_document_pages(self, pages: list[DocumentPage]) -> list[DocumentPage]:
@@ -146,9 +283,7 @@ class SqlAlchemyStore:
                 .order_by(DocumentPageRecord.page_number)
             )
             if organization_id is not None:
-                statement = statement.where(
-                    SourceDocumentRecord.organization_id == organization_id
-                )
+                statement = statement.where(SourceDocumentRecord.organization_id == organization_id)
             records = session.scalars(statement).all()
             return [
                 DocumentPage(
@@ -179,9 +314,7 @@ class SqlAlchemyStore:
                 .where(ProcessingJobRecord.id == job_id)
             )
             if organization_id is not None:
-                statement = statement.where(
-                    SourceDocumentRecord.organization_id == organization_id
-                )
+                statement = statement.where(SourceDocumentRecord.organization_id == organization_id)
             record = session.scalars(statement).first()
             return self._processing_job_from_record(record) if record else None
 
@@ -193,9 +326,7 @@ class SqlAlchemyStore:
         with transaction(self.session_factory) as session:
             statement = select(ProcessingJobRecord).join(SourceDocumentRecord)
             if organization_id is not None:
-                statement = statement.where(
-                    SourceDocumentRecord.organization_id == organization_id
-                )
+                statement = statement.where(SourceDocumentRecord.organization_id == organization_id)
             if document_id is not None:
                 statement = statement.where(ProcessingJobRecord.document_id == document_id)
             records = session.scalars(statement.order_by(ProcessingJobRecord.created_at)).all()
@@ -204,16 +335,14 @@ class SqlAlchemyStore:
     def save_opportunity(self, opportunity: Opportunity) -> Opportunity:
         with transaction(self.session_factory) as session:
             existing = session.get(OpportunityRecord, opportunity.id)
-            if existing:
-                session.delete(existing)
-                session.flush()
-            record = OpportunityRecord(
-                **opportunity.model_dump(exclude={"requirements"}),
-                requirements=[
-                    self._requirement_to_record(item) for item in opportunity.requirements
-                ],
-            )
-            session.add(record)
+            payload = opportunity.model_dump(exclude={"requirements"})
+            requirements = [self._requirement_to_record(item) for item in opportunity.requirements]
+            if existing is None:
+                session.add(OpportunityRecord(**payload, requirements=requirements))
+            else:
+                for name, value in payload.items():
+                    setattr(existing, name, value)
+                existing.requirements = requirements
         return opportunity
 
     def get_opportunity(
@@ -222,7 +351,10 @@ class SqlAlchemyStore:
         with transaction(self.session_factory) as session:
             statement = (
                 select(OpportunityRecord)
-                .outerjoin(SourceDocumentRecord)
+                .outerjoin(
+                    SourceDocumentRecord,
+                    OpportunityRecord.document_id == SourceDocumentRecord.id,
+                )
                 .where(OpportunityRecord.id == opportunity_id)
             )
             if organization_id is not None:
@@ -235,11 +367,80 @@ class SqlAlchemyStore:
             record = session.scalars(statement).unique().first()
             return self._opportunity_from_record(record) if record else None
 
-    def list_opportunities(
-        self, organization_id: UUID | None = None
-    ) -> list[Opportunity]:
+    def get_opportunity_feedback(
+        self, opportunity_id: UUID, organization_id: UUID
+    ) -> OpportunityFeedback | None:
         with transaction(self.session_factory) as session:
-            statement = select(OpportunityRecord).outerjoin(SourceDocumentRecord)
+            record = session.scalars(
+                select(OpportunityFeedbackRecord).where(
+                    OpportunityFeedbackRecord.opportunity_id == opportunity_id,
+                    OpportunityFeedbackRecord.organization_id == organization_id,
+                )
+            ).first()
+            if record is None:
+                return None
+            return OpportunityFeedback(
+                id=record.id,
+                organization_id=record.organization_id,
+                opportunity_id=record.opportunity_id,
+                rating=FeedbackRating(record.rating),
+                reason=record.reason,
+                submitted_by_user_id=record.submitted_by_user_id,
+                created_at=_ensure_aware(record.created_at),
+                updated_at=_ensure_aware(record.updated_at),
+            )
+
+    def save_opportunity_feedback(self, feedback: OpportunityFeedback) -> OpportunityFeedback:
+        try:
+            with transaction(self.session_factory) as session:
+                record = session.scalars(
+                    select(OpportunityFeedbackRecord).where(
+                        OpportunityFeedbackRecord.opportunity_id == feedback.opportunity_id,
+                        OpportunityFeedbackRecord.organization_id == feedback.organization_id,
+                    )
+                ).first()
+                if record is None:
+                    record = OpportunityFeedbackRecord(
+                        **feedback.model_dump(exclude={"rating"}), rating=feedback.rating.value
+                    )
+                    session.add(record)
+                else:
+                    feedback = feedback.model_copy(
+                        update={"id": record.id, "created_at": _ensure_aware(record.created_at)}
+                    )
+                    record.rating = feedback.rating.value
+                    record.reason = feedback.reason
+                    record.submitted_by_user_id = feedback.submitted_by_user_id
+                    record.updated_at = feedback.updated_at
+        except IntegrityError:
+            existing = self.get_opportunity_feedback(
+                feedback.opportunity_id, feedback.organization_id
+            )
+            if existing is not None:
+                return existing
+            raise
+        return feedback
+
+    def get_opportunity_by_source(self, source: str, source_id: str) -> Opportunity | None:
+        with transaction(self.session_factory) as session:
+            record = (
+                session.scalars(
+                    select(OpportunityRecord).where(
+                        OpportunityRecord.source == source,
+                        OpportunityRecord.source_id == source_id,
+                    )
+                )
+                .unique()
+                .first()
+            )
+            return self._opportunity_from_record(record) if record else None
+
+    def list_opportunities(self, organization_id: UUID | None = None) -> list[Opportunity]:
+        with transaction(self.session_factory) as session:
+            statement = select(OpportunityRecord).outerjoin(
+                SourceDocumentRecord,
+                OpportunityRecord.document_id == SourceDocumentRecord.id,
+            )
             if organization_id is not None:
                 statement = statement.where(
                     or_(
@@ -249,6 +450,550 @@ class SqlAlchemyStore:
                 )
             records = session.scalars(statement).unique().all()
             return [self._opportunity_from_record(record) for record in records]
+
+    def save_pipeline_item(self, item: PipelineItem) -> PipelineItem:
+        if self.get_opportunity(item.opportunity_id, item.organization_id) is None:
+            raise ValueError("pipeline opportunity is not visible to the organization")
+        try:
+            with transaction(self.session_factory) as session:
+                duplicate = session.scalars(
+                    select(PipelineItemRecord).where(
+                        PipelineItemRecord.organization_id == item.organization_id,
+                        PipelineItemRecord.opportunity_id == item.opportunity_id,
+                        PipelineItemRecord.id != item.id,
+                    )
+                ).first()
+                if duplicate is not None:
+                    raise ValueError("opportunity is already in the pipeline")
+                payload = item.model_dump()
+                payload["status"] = item.status.value
+                session.merge(PipelineItemRecord(**payload))
+        except IntegrityError as exc:
+            raise ValueError("opportunity is already in the pipeline") from exc
+        return item
+
+    def get_pipeline_item(self, item_id: UUID, organization_id: UUID) -> PipelineItem | None:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(PipelineItemRecord).where(
+                    PipelineItemRecord.id == item_id,
+                    PipelineItemRecord.organization_id == organization_id,
+                )
+            ).first()
+            return self._pipeline_item_from_record(record) if record else None
+
+    def get_pipeline_item_by_opportunity(
+        self, opportunity_id: UUID, organization_id: UUID
+    ) -> PipelineItem | None:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(PipelineItemRecord).where(
+                    PipelineItemRecord.opportunity_id == opportunity_id,
+                    PipelineItemRecord.organization_id == organization_id,
+                )
+            ).first()
+            return self._pipeline_item_from_record(record) if record else None
+
+    def list_pipeline_items(self, organization_id: UUID) -> list[PipelineItem]:
+        with transaction(self.session_factory) as session:
+            records = session.scalars(
+                select(PipelineItemRecord)
+                .where(PipelineItemRecord.organization_id == organization_id)
+                .order_by(
+                    PipelineItemRecord.updated_at.desc(),
+                    PipelineItemRecord.id.desc(),
+                )
+            ).all()
+            return [self._pipeline_item_from_record(record) for record in records]
+
+    def save_compliance_item(self, item: ComplianceItem) -> ComplianceItem:
+        opportunity = self.get_opportunity(item.opportunity_id, item.organization_id)
+        if opportunity is None:
+            raise ValueError("compliance opportunity is not visible to the organization")
+        requirement = self._compliance_requirement(item)
+        if requirement is None:
+            raise ValueError("compliance requirement does not belong to the opportunity")
+        if item.source_evidence != requirement.evidence:
+            raise ValueError("source evidence cannot differ from the extracted requirement")
+        payload = item.model_dump(exclude={"source_evidence"})
+        payload.update(
+            {
+                "priority": item.priority.value,
+                "status": item.status.value,
+                "business_evidence": [entry.model_dump() for entry in item.business_evidence],
+                "evidence_document_id": item.source_evidence.document_id,
+                "evidence_page": item.source_evidence.page,
+                "evidence_section": item.source_evidence.section,
+                "evidence_supporting_text": item.source_evidence.supporting_text,
+            }
+        )
+        try:
+            with transaction(self.session_factory) as session:
+                duplicate = session.scalars(
+                    select(ComplianceItemRecord).where(
+                        ComplianceItemRecord.organization_id == item.organization_id,
+                        ComplianceItemRecord.requirement_id == item.requirement_id,
+                        ComplianceItemRecord.id != item.id,
+                    )
+                ).first()
+                if duplicate is not None:
+                    raise ValueError("requirement is already in the compliance matrix")
+                session.merge(ComplianceItemRecord(**payload))
+        except IntegrityError as exc:
+            raise ValueError("requirement is already in the compliance matrix") from exc
+        return item
+
+    def _compliance_requirement(self, item: ComplianceItem) -> Requirement | None:
+        for opportunity in self.list_opportunities(item.organization_id):
+            requirement = next(
+                (entry for entry in opportunity.requirements if entry.id == item.requirement_id),
+                None,
+            )
+            if requirement is None:
+                continue
+            if opportunity.id == item.opportunity_id:
+                return requirement
+            document = (
+                self.get_document(opportunity.document_id, item.organization_id)
+                if opportunity.document_id is not None
+                else None
+            )
+            if document is not None and document.origin_opportunity_id == item.opportunity_id:
+                return requirement
+        return None
+
+    def get_compliance_item(self, item_id: UUID, organization_id: UUID) -> ComplianceItem | None:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(ComplianceItemRecord).where(
+                    ComplianceItemRecord.id == item_id,
+                    ComplianceItemRecord.organization_id == organization_id,
+                )
+            ).first()
+            return self._compliance_item_from_record(record) if record else None
+
+    def get_compliance_item_by_requirement(
+        self, requirement_id: UUID, organization_id: UUID
+    ) -> ComplianceItem | None:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(ComplianceItemRecord).where(
+                    ComplianceItemRecord.requirement_id == requirement_id,
+                    ComplianceItemRecord.organization_id == organization_id,
+                )
+            ).first()
+            return self._compliance_item_from_record(record) if record else None
+
+    def list_compliance_items(
+        self, opportunity_id: UUID, organization_id: UUID
+    ) -> list[ComplianceItem]:
+        with transaction(self.session_factory) as session:
+            records = session.scalars(
+                select(ComplianceItemRecord)
+                .where(
+                    ComplianceItemRecord.opportunity_id == opportunity_id,
+                    ComplianceItemRecord.organization_id == organization_id,
+                )
+                .order_by(ComplianceItemRecord.created_at, ComplianceItemRecord.id)
+            ).all()
+            return [self._compliance_item_from_record(record) for record in records]
+
+    def apply_amendment_acknowledgement(
+        self,
+        acknowledgement: AmendmentAcknowledgement,
+        superseded_requirement_ids: list[UUID],
+        new_compliance_items: list[ComplianceItem],
+    ) -> AmendmentAcknowledgement:
+        existing = self._get_amendment_acknowledgement(
+            acknowledgement.opportunity_id,
+            acknowledgement.organization_id,
+            acknowledgement.previous_snapshot_id,
+            acknowledgement.current_snapshot_id,
+        )
+        if existing is not None:
+            if existing.selections != acknowledgement.selections:
+                raise ValueError("amendment version pair was acknowledged differently")
+            return existing
+        if (
+            self.get_opportunity(acknowledgement.opportunity_id, acknowledgement.organization_id)
+            is None
+        ):
+            raise ValueError("amendment opportunity is not visible to the organization")
+        snapshots = {
+            item.id: item for item in self.list_sam_snapshots(acknowledgement.opportunity_id)
+        }
+        if (
+            acknowledgement.previous_snapshot_id not in snapshots
+            or acknowledgement.current_snapshot_id not in snapshots
+        ):
+            raise ValueError("amendment snapshots do not belong to the opportunity")
+        reviewer = self.get_identity_by_user_id(acknowledgement.acknowledged_by_user_id)
+        if reviewer is None or reviewer.organization.id != acknowledgement.organization_id:
+            raise ValueError("acknowledging user does not belong to the organization")
+        for item in new_compliance_items:
+            requirement = self._compliance_requirement(item)
+            if (
+                item.organization_id != acknowledgement.organization_id
+                or item.opportunity_id != acknowledgement.opportunity_id
+                or requirement is None
+                or item.source_evidence != requirement.evidence
+            ):
+                raise ValueError("compliance update has invalid requirement evidence")
+
+        try:
+            with transaction(self.session_factory) as session:
+                concurrent = session.scalars(
+                    select(AmendmentAcknowledgementRecord)
+                    .where(
+                        AmendmentAcknowledgementRecord.organization_id
+                        == acknowledgement.organization_id,
+                        AmendmentAcknowledgementRecord.opportunity_id
+                        == acknowledgement.opportunity_id,
+                        AmendmentAcknowledgementRecord.previous_snapshot_id
+                        == acknowledgement.previous_snapshot_id,
+                        AmendmentAcknowledgementRecord.current_snapshot_id
+                        == acknowledgement.current_snapshot_id,
+                    )
+                    .with_for_update()
+                ).first()
+                if concurrent is not None:
+                    found = self._amendment_acknowledgement_from_record(concurrent)
+                    if found.selections != acknowledgement.selections:
+                        raise ValueError("amendment version pair was acknowledged differently")
+                    return found
+                if superseded_requirement_ids:
+                    superseded = session.scalars(
+                        select(ComplianceItemRecord)
+                        .where(
+                            ComplianceItemRecord.organization_id == acknowledgement.organization_id,
+                            ComplianceItemRecord.opportunity_id == acknowledgement.opportunity_id,
+                            ComplianceItemRecord.requirement_id.in_(superseded_requirement_ids),
+                        )
+                        .with_for_update()
+                    ).all()
+                    now = datetime.now(UTC)
+                    for record in superseded:
+                        record.status = ComplianceStatus.NOT_APPLICABLE.value
+                        record.updated_at = now
+                for item in new_compliance_items:
+                    present = session.scalars(
+                        select(ComplianceItemRecord)
+                        .where(
+                            ComplianceItemRecord.organization_id == acknowledgement.organization_id,
+                            ComplianceItemRecord.requirement_id == item.requirement_id,
+                        )
+                        .with_for_update()
+                    ).first()
+                    if present is not None:
+                        continue
+                    payload = item.model_dump(exclude={"source_evidence"})
+                    payload.update(
+                        {
+                            "priority": item.priority.value,
+                            "status": item.status.value,
+                            "business_evidence": [
+                                entry.model_dump() for entry in item.business_evidence
+                            ],
+                            "evidence_document_id": item.source_evidence.document_id,
+                            "evidence_page": item.source_evidence.page,
+                            "evidence_section": item.source_evidence.section,
+                            "evidence_supporting_text": (item.source_evidence.supporting_text),
+                        }
+                    )
+                    session.add(ComplianceItemRecord(**payload))
+                session.add(
+                    AmendmentAcknowledgementRecord(
+                        **acknowledgement.model_dump(exclude={"selections"}),
+                        selections=[
+                            item.model_dump(mode="json") for item in acknowledgement.selections
+                        ],
+                    )
+                )
+        except IntegrityError as exc:
+            winner = self._get_amendment_acknowledgement(
+                acknowledgement.opportunity_id,
+                acknowledgement.organization_id,
+                acknowledgement.previous_snapshot_id,
+                acknowledgement.current_snapshot_id,
+            )
+            if winner is not None and winner.selections == acknowledgement.selections:
+                return winner
+            raise ValueError("amendment acknowledgement conflicts with stored data") from exc
+        return acknowledgement
+
+    def _get_amendment_acknowledgement(
+        self,
+        opportunity_id: UUID,
+        organization_id: UUID,
+        previous_snapshot_id: UUID,
+        current_snapshot_id: UUID,
+    ) -> AmendmentAcknowledgement | None:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(AmendmentAcknowledgementRecord).where(
+                    AmendmentAcknowledgementRecord.opportunity_id == opportunity_id,
+                    AmendmentAcknowledgementRecord.organization_id == organization_id,
+                    AmendmentAcknowledgementRecord.previous_snapshot_id == previous_snapshot_id,
+                    AmendmentAcknowledgementRecord.current_snapshot_id == current_snapshot_id,
+                )
+            ).first()
+            return (
+                self._amendment_acknowledgement_from_record(record) if record is not None else None
+            )
+
+    def list_amendment_acknowledgements(
+        self, opportunity_id: UUID, organization_id: UUID
+    ) -> list[AmendmentAcknowledgement]:
+        with transaction(self.session_factory) as session:
+            records = session.scalars(
+                select(AmendmentAcknowledgementRecord)
+                .where(
+                    AmendmentAcknowledgementRecord.opportunity_id == opportunity_id,
+                    AmendmentAcknowledgementRecord.organization_id == organization_id,
+                )
+                .order_by(
+                    AmendmentAcknowledgementRecord.acknowledged_at.desc(),
+                    AmendmentAcknowledgementRecord.id.desc(),
+                )
+            ).all()
+            return [self._amendment_acknowledgement_from_record(record) for record in records]
+
+    def save_opportunity_watch(self, watch: OpportunityWatch) -> OpportunityWatch:
+        if self.get_opportunity(watch.opportunity_id, watch.organization_id) is None:
+            raise ValueError("watch opportunity is not visible to the organization")
+        try:
+            with transaction(self.session_factory) as session:
+                session.merge(OpportunityWatchRecord(**watch.model_dump()))
+        except IntegrityError as exc:
+            raise ValueError("opportunity is already watched") from exc
+        return watch
+
+    def get_opportunity_watch(
+        self, opportunity_id: UUID, organization_id: UUID
+    ) -> OpportunityWatch | None:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(OpportunityWatchRecord).where(
+                    OpportunityWatchRecord.opportunity_id == opportunity_id,
+                    OpportunityWatchRecord.organization_id == organization_id,
+                )
+            ).first()
+            return self._opportunity_watch_from_record(record) if record else None
+
+    def list_opportunity_watches(self, organization_id: UUID) -> list[OpportunityWatch]:
+        with transaction(self.session_factory) as session:
+            records = session.scalars(
+                select(OpportunityWatchRecord)
+                .where(OpportunityWatchRecord.organization_id == organization_id)
+                .order_by(
+                    OpportunityWatchRecord.created_at.desc(), OpportunityWatchRecord.id.desc()
+                )
+            ).all()
+            return [self._opportunity_watch_from_record(record) for record in records]
+
+    def delete_opportunity_watch(self, opportunity_id: UUID, organization_id: UUID) -> bool:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(OpportunityWatchRecord).where(
+                    OpportunityWatchRecord.opportunity_id == opportunity_id,
+                    OpportunityWatchRecord.organization_id == organization_id,
+                )
+            ).first()
+            if record is None:
+                return False
+            session.execute(
+                delete(OpportunityAlertRecord).where(OpportunityAlertRecord.watch_id == record.id)
+            )
+            session.delete(record)
+            return True
+
+    def save_opportunity_alert(self, alert: OpportunityAlert) -> OpportunityAlert:
+        try:
+            with transaction(self.session_factory) as session:
+                payload = alert.model_dump()
+                payload["alert_type"] = alert.alert_type.value
+                payload["status"] = alert.status.value
+                session.merge(OpportunityAlertRecord(**payload))
+        except IntegrityError:
+            existing = self.get_opportunity_alert_by_dedupe_key(
+                alert.dedupe_key, alert.organization_id
+            )
+            if existing is not None:
+                return existing
+            raise
+        return alert
+
+    def get_opportunity_alert(
+        self, alert_id: UUID, organization_id: UUID
+    ) -> OpportunityAlert | None:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(OpportunityAlertRecord).where(
+                    OpportunityAlertRecord.id == alert_id,
+                    OpportunityAlertRecord.organization_id == organization_id,
+                )
+            ).first()
+            return self._opportunity_alert_from_record(record) if record else None
+
+    def get_opportunity_alert_by_dedupe_key(
+        self, dedupe_key: str, organization_id: UUID
+    ) -> OpportunityAlert | None:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(OpportunityAlertRecord).where(
+                    OpportunityAlertRecord.dedupe_key == dedupe_key,
+                    OpportunityAlertRecord.organization_id == organization_id,
+                )
+            ).first()
+            return self._opportunity_alert_from_record(record) if record else None
+
+    def list_opportunity_alerts(self, organization_id: UUID) -> list[OpportunityAlert]:
+        with transaction(self.session_factory) as session:
+            records = session.scalars(
+                select(OpportunityAlertRecord)
+                .where(OpportunityAlertRecord.organization_id == organization_id)
+                .order_by(
+                    OpportunityAlertRecord.created_at.desc(), OpportunityAlertRecord.id.desc()
+                )
+            ).all()
+            return [self._opportunity_alert_from_record(record) for record in records]
+
+    def save_notification_preference(self, item: NotificationPreference) -> NotificationPreference:
+        with transaction(self.session_factory) as session:
+            payload = item.model_dump()
+            payload["alert_types"] = [value.value for value in item.alert_types]
+            session.merge(NotificationPreferenceRecord(**payload))
+        return item
+
+    def get_notification_preference(self, organization_id: UUID) -> NotificationPreference | None:
+        with transaction(self.session_factory) as session:
+            record = session.get(NotificationPreferenceRecord, organization_id)
+            return self._notification_preference_from_record(record) if record else None
+
+    def list_notification_preferences(
+        self, enabled_only: bool = False
+    ) -> list[NotificationPreference]:
+        with transaction(self.session_factory) as session:
+            statement = select(NotificationPreferenceRecord)
+            if enabled_only:
+                statement = statement.where(NotificationPreferenceRecord.enabled.is_(True))
+            records = session.scalars(
+                statement.order_by(NotificationPreferenceRecord.updated_at)
+            ).all()
+            return [self._notification_preference_from_record(record) for record in records]
+
+    def save_notification_delivery(self, item: NotificationDelivery) -> NotificationDelivery:
+        try:
+            with transaction(self.session_factory) as session:
+                payload = item.model_dump()
+                payload["status"] = item.status.value
+                session.merge(NotificationDeliveryRecord(**payload))
+        except IntegrityError:
+            existing = self.get_notification_delivery_by_alert(item.alert_id, item.organization_id)
+            if existing is not None:
+                return existing
+            raise
+        return item
+
+    def get_notification_delivery_by_alert(
+        self, alert_id: UUID, organization_id: UUID
+    ) -> NotificationDelivery | None:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(NotificationDeliveryRecord).where(
+                    NotificationDeliveryRecord.alert_id == alert_id,
+                    NotificationDeliveryRecord.organization_id == organization_id,
+                )
+            ).first()
+            return self._notification_delivery_from_record(record) if record else None
+
+    def list_notification_deliveries(
+        self, organization_id: UUID | None = None
+    ) -> list[NotificationDelivery]:
+        with transaction(self.session_factory) as session:
+            statement = select(NotificationDeliveryRecord)
+            if organization_id is not None:
+                statement = statement.where(
+                    NotificationDeliveryRecord.organization_id == organization_id
+                )
+            records = session.scalars(
+                statement.order_by(
+                    NotificationDeliveryRecord.created_at.desc(),
+                    NotificationDeliveryRecord.id.desc(),
+                )
+            ).all()
+            return [self._notification_delivery_from_record(record) for record in records]
+
+    def claim_notification_deliveries(
+        self, max_attempts: int, limit: int = 100
+    ) -> list[NotificationDelivery]:
+        with transaction(self.session_factory) as session:
+            records = session.scalars(
+                select(NotificationDeliveryRecord)
+                .where(
+                    NotificationDeliveryRecord.status.in_(
+                        [DeliveryStatus.PENDING.value, DeliveryStatus.FAILED.value]
+                    ),
+                    NotificationDeliveryRecord.attempts < max_attempts,
+                )
+                .order_by(NotificationDeliveryRecord.created_at, NotificationDeliveryRecord.id)
+                .limit(limit)
+                .with_for_update(skip_locked=True)
+            ).all()
+            now = datetime.now(UTC)
+            for record in records:
+                record.status = DeliveryStatus.PROCESSING.value
+                record.updated_at = now
+            session.flush()
+            return [self._notification_delivery_from_record(record) for record in records]
+
+    def save_sam_ingestion_run(self, run: SamIngestionRun) -> SamIngestionRun:
+        with transaction(self.session_factory) as session:
+            payload = run.model_dump()
+            payload["status"] = run.status.value
+            session.merge(SamIngestionRunRecord(**payload))
+        return run
+
+    def list_sam_ingestion_runs(self) -> list[SamIngestionRun]:
+        with transaction(self.session_factory) as session:
+            records = session.scalars(
+                select(SamIngestionRunRecord).order_by(
+                    SamIngestionRunRecord.started_at,
+                    SamIngestionRunRecord.id,
+                )
+            ).all()
+            return [self._sam_ingestion_run_from_record(record) for record in records]
+
+    def save_sam_snapshot(self, snapshot: SamOpportunitySnapshot) -> SamOpportunitySnapshot:
+        with transaction(self.session_factory) as session:
+            if session.get(OpportunityRecord, snapshot.opportunity_id) is None:
+                raise ValueError("SAM snapshot opportunity does not exist")
+            session.add(SamOpportunitySnapshotRecord(**snapshot.model_dump()))
+        return snapshot
+
+    def get_latest_sam_snapshot(self, opportunity_id: UUID) -> SamOpportunitySnapshot | None:
+        with transaction(self.session_factory) as session:
+            record = session.scalars(
+                select(SamOpportunitySnapshotRecord)
+                .where(SamOpportunitySnapshotRecord.opportunity_id == opportunity_id)
+                .order_by(
+                    SamOpportunitySnapshotRecord.observed_at.desc(),
+                    SamOpportunitySnapshotRecord.id.desc(),
+                )
+            ).first()
+            return self._sam_snapshot_from_record(record) if record else None
+
+    def list_sam_snapshots(self, opportunity_id: UUID) -> list[SamOpportunitySnapshot]:
+        with transaction(self.session_factory) as session:
+            records = session.scalars(
+                select(SamOpportunitySnapshotRecord)
+                .where(SamOpportunitySnapshotRecord.opportunity_id == opportunity_id)
+                .order_by(
+                    SamOpportunitySnapshotRecord.observed_at,
+                    SamOpportunitySnapshotRecord.id,
+                )
+            ).all()
+            return [self._sam_snapshot_from_record(record) for record in records]
 
     def get_embedding(
         self,
@@ -325,7 +1070,10 @@ class SqlAlchemyStore:
             if item.opportunity_id is not None:
                 visible_opportunity = session.scalars(
                     select(OpportunityRecord)
-                    .outerjoin(SourceDocumentRecord)
+                    .outerjoin(
+                        SourceDocumentRecord,
+                        OpportunityRecord.document_id == SourceDocumentRecord.id,
+                    )
                     .where(
                         OpportunityRecord.id == item.opportunity_id,
                         or_(
@@ -335,9 +1083,7 @@ class SqlAlchemyStore:
                     )
                 ).first()
                 if visible_opportunity is None:
-                    raise ValueError(
-                        "review opportunity is not visible to the organization"
-                    )
+                    raise ValueError("review opportunity is not visible to the organization")
 
             evidence_document_ids = {evidence.document_id for evidence in item.evidence}
             owned_document_ids = set(
@@ -349,9 +1095,7 @@ class SqlAlchemyStore:
                 ).all()
             )
             if owned_document_ids != evidence_document_ids:
-                raise ValueError(
-                    "review evidence document is not owned by the organization"
-                )
+                raise ValueError("review evidence document is not owned by the organization")
 
             existing = session.get(ReviewItemRecord, item.id)
             if existing:
@@ -371,14 +1115,78 @@ class SqlAlchemyStore:
             )
         return item
 
+    def resolve_conflicting_review(
+        self,
+        review_id: UUID,
+        organization_id: UUID,
+        reviewer_id: UUID,
+        corrected_value: str,
+        note: str | None = None,
+    ) -> ReviewItem:
+        with transaction(self.session_factory) as session:
+            review_record = (
+                session.scalars(
+                    select(ReviewItemRecord)
+                    .where(
+                        ReviewItemRecord.id == review_id,
+                        ReviewItemRecord.organization_id == organization_id,
+                    )
+                    .with_for_update()
+                )
+                .unique()
+                .first()
+            )
+            if review_record is None or review_record.opportunity_id is None:
+                raise LookupError("review not found")
+            opportunity_record = (
+                session.scalars(
+                    select(OpportunityRecord)
+                    .join(
+                        SourceDocumentRecord,
+                        OpportunityRecord.document_id == SourceDocumentRecord.id,
+                    )
+                    .where(
+                        OpportunityRecord.id == review_record.opportunity_id,
+                        SourceDocumentRecord.organization_id == organization_id,
+                    )
+                    .with_for_update()
+                )
+                .unique()
+                .first()
+            )
+            if opportunity_record is None:
+                raise LookupError("opportunity not found")
+            item = self._review_from_record(review_record)
+            opportunity = self._opportunity_from_record(opportunity_record)
+            resolved, updated_opportunity = resolve_conflicting_value(
+                item,
+                opportunity,
+                reviewer_id=reviewer_id,
+                corrected_value=corrected_value,
+                note=note,
+            )
+            field_name = item.field_name.removeprefix("opportunity:")
+            setattr(opportunity_record, field_name, getattr(updated_opportunity, field_name))
+            review_record.status = resolved.status.value
+            review_record.corrected_value = resolved.corrected_value
+            review_record.reviewer_id = resolved.reviewer_id
+            review_record.resolution_note = resolved.resolution_note
+            review_record.updated_at = resolved.updated_at
+            review_record.resolved_at = resolved.resolved_at
+        return resolved
+
     def get_review_item(self, review_id: UUID, organization_id: UUID) -> ReviewItem | None:
         with transaction(self.session_factory) as session:
-            record = session.scalars(
-                select(ReviewItemRecord).where(
-                    ReviewItemRecord.id == review_id,
-                    ReviewItemRecord.organization_id == organization_id,
+            record = (
+                session.scalars(
+                    select(ReviewItemRecord).where(
+                        ReviewItemRecord.id == review_id,
+                        ReviewItemRecord.organization_id == organization_id,
+                    )
                 )
-            ).unique().first()
+                .unique()
+                .first()
+            )
             return self._review_from_record(record) if record else None
 
     def list_review_items(
@@ -404,9 +1212,7 @@ class SqlAlchemyStore:
     def register_identity(self, identity: AuthIdentity) -> AuthIdentity:
         with transaction(self.session_factory) as session:
             existing = session.scalars(
-                select(UserAccountRecord).where(
-                    UserAccountRecord.email == identity.user.email
-                )
+                select(UserAccountRecord).where(UserAccountRecord.email == identity.user.email)
             ).first()
             if existing is not None:
                 raise ValueError("email is already registered")
@@ -482,6 +1288,11 @@ class SqlAlchemyStore:
             certifications=record.certifications,
             set_asides=record.set_asides,
             naics_codes=record.naics_codes,
+            insurance_coverages=record.insurance_coverages,
+            contract_preferences=record.contract_preferences,
+            past_performance=[
+                PastPerformanceProject.model_validate(item) for item in record.past_performance
+            ],
             capability_statement=record.capability_statement,
         )
 
@@ -500,6 +1311,9 @@ class SqlAlchemyStore:
             status=DocumentStatus(record.status),
             page_count=record.page_count,
             error_message=record.error_message,
+            origin_opportunity_id=record.origin_opportunity_id,
+            origin_url=record.origin_url,
+            origin_snapshot_sha256=record.origin_snapshot_sha256,
         )
 
     @staticmethod
@@ -571,6 +1385,120 @@ class SqlAlchemyStore:
         )
 
     @staticmethod
+    def _pipeline_item_from_record(record: PipelineItemRecord) -> PipelineItem:
+        return PipelineItem(
+            id=record.id,
+            organization_id=record.organization_id,
+            opportunity_id=record.opportunity_id,
+            status=PipelineStatus(record.status),
+            owner_user_id=record.owner_user_id,
+            next_action=record.next_action,
+            notes=record.notes,
+            created_at=_ensure_aware(record.created_at),
+            updated_at=_ensure_aware(record.updated_at),
+        )
+
+    @staticmethod
+    def _compliance_item_from_record(record: ComplianceItemRecord) -> ComplianceItem:
+        return ComplianceItem(
+            id=record.id,
+            organization_id=record.organization_id,
+            opportunity_id=record.opportunity_id,
+            requirement_id=record.requirement_id,
+            description=record.description,
+            category=record.category,
+            priority=RequirementPriority(record.priority),
+            status=ComplianceStatus(record.status),
+            source_evidence=Evidence(
+                document_id=record.evidence_document_id,
+                page=record.evidence_page,
+                section=record.evidence_section,
+                supporting_text=record.evidence_supporting_text,
+            ),
+            business_evidence=[
+                BusinessEvidence.model_validate(item) for item in record.business_evidence
+            ],
+            owner_user_id=record.owner_user_id,
+            due_date=record.due_date,
+            notes=record.notes,
+            created_at=_ensure_aware(record.created_at),
+            updated_at=_ensure_aware(record.updated_at),
+        )
+
+    @staticmethod
+    def _amendment_acknowledgement_from_record(
+        record: AmendmentAcknowledgementRecord,
+    ) -> AmendmentAcknowledgement:
+        return AmendmentAcknowledgement(
+            id=record.id,
+            organization_id=record.organization_id,
+            opportunity_id=record.opportunity_id,
+            previous_snapshot_id=record.previous_snapshot_id,
+            current_snapshot_id=record.current_snapshot_id,
+            selections=[AmendmentSelection.model_validate(item) for item in record.selections],
+            acknowledged_by_user_id=record.acknowledged_by_user_id,
+            acknowledged_at=_ensure_aware(record.acknowledged_at),
+        )
+
+    @staticmethod
+    def _opportunity_watch_from_record(record: OpportunityWatchRecord) -> OpportunityWatch:
+        return OpportunityWatch(
+            id=record.id,
+            organization_id=record.organization_id,
+            opportunity_id=record.opportunity_id,
+            created_at=_ensure_aware(record.created_at),
+        )
+
+    @staticmethod
+    def _opportunity_alert_from_record(record: OpportunityAlertRecord) -> OpportunityAlert:
+        return OpportunityAlert(
+            id=record.id,
+            organization_id=record.organization_id,
+            opportunity_id=record.opportunity_id,
+            watch_id=record.watch_id,
+            alert_type=AlertType(record.alert_type),
+            status=AlertStatus(record.status),
+            title=record.title,
+            message=record.message,
+            changed_fields=record.changed_fields,
+            dedupe_key=record.dedupe_key,
+            created_at=_ensure_aware(record.created_at),
+            updated_at=_ensure_aware(record.updated_at),
+        )
+
+    @staticmethod
+    def _notification_preference_from_record(
+        record: NotificationPreferenceRecord,
+    ) -> NotificationPreference:
+        return NotificationPreference(
+            organization_id=record.organization_id,
+            enabled=record.enabled,
+            recipient_email=record.recipient_email,
+            alert_types=[AlertType(value) for value in record.alert_types],
+            created_at=_ensure_aware(record.created_at),
+            updated_at=_ensure_aware(record.updated_at),
+        )
+
+    @staticmethod
+    def _notification_delivery_from_record(
+        record: NotificationDeliveryRecord,
+    ) -> NotificationDelivery:
+        return NotificationDelivery(
+            id=record.id,
+            organization_id=record.organization_id,
+            alert_id=record.alert_id,
+            recipient_email=record.recipient_email,
+            subject=record.subject,
+            body=record.body,
+            status=DeliveryStatus(record.status),
+            attempts=record.attempts,
+            error_message=record.error_message,
+            created_at=_ensure_aware(record.created_at),
+            updated_at=_ensure_aware(record.updated_at),
+            sent_at=_ensure_aware(record.sent_at) if record.sent_at else None,
+        )
+
+    @staticmethod
     def _review_from_record(record: ReviewItemRecord) -> ReviewItem:
         def aware(value: datetime | None) -> datetime | None:
             if value is not None and value.tzinfo is None:
@@ -618,4 +1546,33 @@ class SqlAlchemyStore:
             content_sha256=record.content_sha256,
             vector=[float(component) for component in record.embedding],
             created_at=_ensure_aware(record.created_at),
+        )
+
+    @staticmethod
+    def _sam_ingestion_run_from_record(record: SamIngestionRunRecord) -> SamIngestionRun:
+        return SamIngestionRun(
+            id=record.id,
+            posted_from=record.posted_from,
+            posted_to=record.posted_to,
+            status=SamIngestionStatus(record.status),
+            pages_fetched=record.pages_fetched,
+            records_fetched=record.records_fetched,
+            created_count=record.created_count,
+            updated_count=record.updated_count,
+            unchanged_count=record.unchanged_count,
+            started_at=_ensure_aware(record.started_at),
+            finished_at=(_ensure_aware(record.finished_at) if record.finished_at else None),
+            error_message=record.error_message,
+        )
+
+    @staticmethod
+    def _sam_snapshot_from_record(
+        record: SamOpportunitySnapshotRecord,
+    ) -> SamOpportunitySnapshot:
+        return SamOpportunitySnapshot(
+            id=record.id,
+            opportunity_id=record.opportunity_id,
+            content_sha256=record.content_sha256,
+            normalized_payload=record.normalized_payload,
+            observed_at=_ensure_aware(record.observed_at),
         )

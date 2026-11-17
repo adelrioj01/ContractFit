@@ -3,7 +3,7 @@ from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class EligibilityStatus(StrEnum):
@@ -54,6 +54,11 @@ class SourceDocument(BaseModel):
     status: DocumentStatus = DocumentStatus.READY
     page_count: int = Field(default=1, ge=0)
     error_message: str | None = None
+    origin_opportunity_id: UUID | None = None
+    origin_url: str | None = None
+    origin_snapshot_sha256: str | None = Field(
+        default=None, min_length=64, max_length=64
+    )
 
 
 class DocumentPage(BaseModel):
@@ -85,6 +90,24 @@ class Requirement(BaseModel):
     evidence: Evidence
 
 
+class PastPerformanceProject(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    client: str | None = Field(default=None, max_length=255)
+    description: str = Field(min_length=1, max_length=4000)
+    service_categories: list[str] = Field(default_factory=list)
+    state: str | None = Field(default=None, max_length=100)
+    contract_value: Decimal | None = Field(default=None, ge=0)
+    start_date: date | None = None
+    end_date: date | None = None
+    reference_available: bool = False
+
+    @model_validator(mode="after")
+    def validate_dates(self) -> "PastPerformanceProject":
+        if self.start_date and self.end_date and self.end_date < self.start_date:
+            raise ValueError("past-performance end_date must not precede start_date")
+        return self
+
+
 class CompanyProfile(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     organization_id: UUID
@@ -98,7 +121,52 @@ class CompanyProfile(BaseModel):
     certifications: list[str] = Field(default_factory=list)
     set_asides: list[str] = Field(default_factory=list)
     naics_codes: list[str] = Field(default_factory=list)
+    insurance_coverages: list[str] = Field(default_factory=list)
+    contract_preferences: list[str] = Field(default_factory=list)
+    past_performance: list[PastPerformanceProject] = Field(default_factory=list)
     capability_statement: str = ""
+
+    @model_validator(mode="after")
+    def validate_contract_capacity(self) -> "CompanyProfile":
+        if (
+            self.minimum_contract_value is not None
+            and self.maximum_contract_value is not None
+            and self.maximum_contract_value < self.minimum_contract_value
+        ):
+            raise ValueError(
+                "maximum_contract_value must be greater than or equal to minimum_contract_value"
+            )
+        return self
+
+
+class ProfileCompleteness(BaseModel):
+    percentage: int = Field(ge=0, le=100)
+    completed_sections: list[str]
+    missing_sections: list[str]
+
+
+def assess_profile_completeness(profile: CompanyProfile) -> ProfileCompleteness:
+    sections = {
+        "Services": bool(profile.service_categories),
+        "Service territory": bool(profile.states),
+        "Contract capacity": (
+            profile.minimum_contract_value is not None
+            or profile.maximum_contract_value is not None
+        ),
+        "Licenses and certifications": bool(profile.licenses or profile.certifications),
+        "Insurance": bool(profile.insurance_coverages),
+        "Set-aside status": bool(profile.set_asides),
+        "NAICS codes": bool(profile.naics_codes),
+        "Capability statement": bool(profile.capability_statement.strip()),
+        "Past performance": bool(profile.past_performance),
+    }
+    completed = [name for name, present in sections.items() if present]
+    missing = [name for name, present in sections.items() if not present]
+    return ProfileCompleteness(
+        percentage=round(len(completed) / len(sections) * 100),
+        completed_sections=completed,
+        missing_sections=missing,
+    )
 
 
 class Opportunity(BaseModel):

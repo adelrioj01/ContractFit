@@ -5,90 +5,345 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>ContractFit</title>
   <style>
-    :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;background:#08111f;color:#e8eef8}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#15395a,#08111f 45%);min-height:100vh}main{max-width:1120px;margin:auto;padding:48px 24px}header{display:flex;justify-content:space-between;align-items:end;gap:24px;margin-bottom:32px}h1{font-size:clamp(2.4rem,7vw,5rem);line-height:.9;margin:0;letter-spacing:-.06em}h2{margin-top:36px}.eyebrow{color:#5eead4;text-transform:uppercase;letter-spacing:.16em;font-size:.75rem}.subtle{color:#91a4bd;max-width:620px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}.card{background:#101f33e0;border:1px solid #27435f;border-radius:18px;padding:22px;box-shadow:0 20px 50px #0005}.score{font-size:3rem;font-weight:800;color:#5eead4}.badge{display:inline-block;padding:5px 10px;border-radius:999px;background:#173f47;color:#88f7e5;font-size:.75rem}.gate{display:flex;justify-content:space-between;gap:12px;border-top:1px solid #27435f;padding:10px 0}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}.secondary{background:#29425d;color:#e8eef8}button{background:#5eead4;color:#06211e;border:0;border-radius:10px;padding:10px 16px;font-weight:700;cursor:pointer}button:disabled{cursor:wait;opacity:.6}button:focus-visible,input:focus-visible{outline:3px solid #f8d66d;outline-offset:3px}.upload-card,.auth-card{margin-bottom:16px}.upload-form,.auth-form{display:flex;flex-wrap:wrap;align-items:end;gap:14px;margin-top:18px}.field{display:grid;gap:7px;flex:1 1 260px}.field label{font-weight:700}.field input{width:100%;min-height:44px;padding:9px;border:1px solid #3f607e;border-radius:10px;background:#081523;color:#e8eef8}.upload-state{margin:14px 0 0;min-height:1.5em}.upload-state[data-kind="success"]{color:#88f7e5}.upload-state[data-kind="error"]{color:#fca5a5}.progress-wrap{display:none;margin-top:12px}.progress-wrap.visible{display:block}.progress-wrap progress{width:100%;height:10px;accent-color:#5eead4}.empty{grid-column:1/-1;color:#91a4bd}
-    @media(max-width:640px){main{padding:32px 16px}header{align-items:flex-start;flex-direction:column}.upload-form button{width:100%}}
+    :root{font-family:"IBM Plex Sans","Source Sans 3",Inter,system-ui,sans-serif;background:#f3f1ec;color:#17201d;--ink:#17201d;--muted:#66706c;--line:#d8d7d1;--paper:#fffefa;--navy:#163b35;--navy-2:#23564d;--green:#276449;--amber:#9b6115;--red:#9a3737}*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#f3f1ec;min-height:100vh}button,input,select,textarea{font:inherit}button,.button-link{background:var(--navy);color:white;border:1px solid var(--navy);border-radius:7px;padding:9px 14px;font-weight:650;cursor:pointer;text-decoration:none;display:inline-block}button:hover,.button-link:hover{background:var(--navy-2)}button:disabled{cursor:wait;opacity:.55}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:3px solid #d6a751;outline-offset:2px}.secondary{background:white;color:var(--ink);border-color:#bfc4c0}.secondary:hover{background:#f3f1ec}.app-shell{display:grid;grid-template-columns:228px minmax(0,1fr);min-height:100vh}.sidebar{background:#15322e;color:#eef4f1;padding:24px 18px;display:flex;flex-direction:column;gap:28px;position:sticky;top:0;height:100vh}.brand{font-size:1.22rem;font-weight:750;letter-spacing:-.02em}.brand small{display:block;color:#a9bdb7;font-size:.72rem;font-weight:500;letter-spacing:.08em;margin-top:5px;text-transform:uppercase}.nav{display:grid;gap:4px}.nav a{color:#c8d5d1;text-decoration:none;padding:9px 10px;border-radius:6px;font-size:.92rem;display:flex;align-items:center;gap:9px}.nav a:hover{background:#1f433d;color:white}.nav a[aria-current="page"]{background:#284b45;color:white;font-weight:650}.nav-icon{width:20px;display:inline-grid;place-items:center;font-size:1rem}.sidebar-footer{margin-top:auto;font-size:.78rem;color:#a9bdb7}.workspace{min-width:0}.topbar{height:68px;background:var(--paper);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 28px;gap:20px}.topbar h1{font-size:1.05rem;margin:0}.workspace-meta{font-size:.82rem;color:var(--muted)}main{max-width:1480px;margin:auto;padding:26px 28px 56px}#opportunities,#qualification,#pipeline,#reviews,#documents{scroll-margin-top:22px}h2{font-size:1.4rem;margin:0}h3{margin:0;font-size:1rem}.page-heading{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;margin-bottom:20px}.page-heading p{margin:6px 0 0;color:var(--muted)}.eyebrow{color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-size:.68rem;font-weight:750}.subtle{color:var(--muted)}.card{background:var(--paper);border:1px solid var(--line);border-radius:9px;padding:18px}.summary-strip{display:grid;grid-template-columns:minmax(260px,2fr) repeat(3,minmax(120px,1fr));border:1px solid var(--line);border-radius:9px;background:var(--paper);margin-bottom:16px;overflow:hidden}.summary-item{padding:15px 18px;border-right:1px solid var(--line)}.summary-item:last-child{border:0}.summary-value{font-size:1.25rem;font-weight:750;margin-top:4px}.summary-copy{font-size:.82rem;color:var(--muted);margin-top:3px}.filter-form,.upload-form,.auth-form{display:flex;flex-wrap:wrap;align-items:end;gap:10px}.filter-card{margin-bottom:16px}.field{display:grid;gap:5px;flex:1 1 180px}.field label,.checkbox-field{font-size:.78rem;font-weight:700;color:#39433f}.field input,.field select{width:100%;height:39px;padding:8px 10px;border:1px solid #bfc4c0;border-radius:6px;background:white;color:var(--ink)}.checkbox-field{display:flex;align-items:center;gap:7px;min-height:39px}.checkbox-field input{width:auto}.opportunity-layout{display:grid;grid-template-columns:minmax(560px,1.45fr) minmax(340px,.75fr);gap:16px;align-items:start}.table-card{padding:0;overflow:hidden}.table-header{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}.count{font-size:.78rem;color:var(--muted)}.table-wrap{overflow:auto}.opportunity-table{width:100%;border-collapse:collapse;font-size:.84rem}.opportunity-table th{text-align:left;color:var(--muted);font-size:.69rem;text-transform:uppercase;letter-spacing:.06em;padding:10px 12px;background:#f7f5f0;border-bottom:1px solid var(--line)}.opportunity-table td{padding:12px;border-bottom:1px solid #e7e4dd;vertical-align:middle}.opportunity-table tr:last-child td{border-bottom:0}.opportunity-table tbody tr{cursor:pointer}.opportunity-table tbody tr:hover,.opportunity-table tbody tr.selected{background:#f0f5f2}.opportunity-title{font-weight:700;display:block;max-width:380px}.opportunity-agency{color:var(--muted);font-size:.76rem;margin-top:3px;display:block}.decision{display:inline-flex;align-items:center;gap:6px;font-weight:750;font-size:.75rem;white-space:nowrap}.decision::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}.decision-pursue{color:var(--green)}.decision-review{color:var(--amber)}.decision-no-go{color:var(--red)}.fit{font-variant-numeric:tabular-nums;font-weight:700}.detail-card{position:sticky;top:84px;padding:0;overflow:hidden}.detail-head{padding:20px;border-bottom:1px solid var(--line)}.detail-head h3{font-size:1.2rem;margin:8px 0}.detail-body{padding:18px 20px}.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px}.detail-label{font-size:.68rem;text-transform:uppercase;color:var(--muted);letter-spacing:.06em}.detail-value{font-size:.86rem;font-weight:650;margin-top:3px}.detail-section{border-top:1px solid var(--line);padding-top:15px;margin-top:15px}.detail-section h4{font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 9px}.feedback-options{display:flex;gap:12px;flex-wrap:wrap;font-size:.82rem}.feedback-options label{display:flex;align-items:center;gap:5px}.feedback-reason{width:100%;min-height:72px;margin-top:10px;padding:8px 10px;border:1px solid #bfc4c0;border-radius:6px;resize:vertical}.plain-list{margin:0;padding-left:18px;font-size:.85rem}.plain-list li+li{margin-top:7px}.gate{display:grid;grid-template-columns:1fr auto;gap:12px;border-top:1px solid #e7e4dd;padding:10px 0;font-size:.82rem}.gate:first-of-type{border-top:0}.gate-reason{display:block;color:var(--muted);font-size:.76rem;margin-top:3px}.badge{display:inline-block;padding:3px 7px;border:1px solid #c9cec9;border-radius:5px;background:#f7f5f0;color:#4a5551;font-size:.68rem;font-weight:700}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}.task-section{margin-top:26px}.task-section>.section-heading{display:flex;justify-content:space-between;align-items:end;margin-bottom:10px}.task-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.review-list{display:grid}.review-row{padding:13px 0;border-top:1px solid var(--line)}.review-row:first-child{border-top:0}.review-row p{font-size:.82rem;margin:6px 0}.pipeline-form{display:grid;grid-template-columns:minmax(220px,1.4fr) minmax(150px,.5fr) minmax(220px,1fr) auto;gap:10px;align-items:center;padding:12px 16px;border-top:1px solid var(--line)}.pipeline-form:first-child{border-top:0}.pipeline-form input,.pipeline-form select{height:39px;padding:8px 10px;border:1px solid #bfc4c0;border-radius:6px;background:white}.upload-state{margin:10px 0 0;min-height:1.3em;font-size:.82rem}.upload-state[data-kind="success"]{color:var(--green)}.upload-state[data-kind="error"]{color:var(--red)}.progress-wrap{display:none;margin-top:10px}.progress-wrap.visible{display:block}.progress-wrap progress{width:100%;height:8px;accent-color:var(--navy)}.empty{color:var(--muted);padding:20px}.auth-card{margin-top:16px}.auth-form .field{flex-basis:150px}
+    textarea{font:inherit;width:100%;min-height:88px;padding:9px 10px;border:1px solid #bfc4c0;border-radius:6px;background:white;color:var(--ink);resize:vertical}.onboarding-card{margin-bottom:20px}.onboarding-progress{display:flex;align-items:center;gap:12px;margin:10px 0 18px}.onboarding-progress progress{width:220px;accent-color:var(--green)}.onboarding-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.onboarding-step{border:1px solid var(--line);border-radius:7px;padding:14px;margin:0;min-width:0}.onboarding-step legend{font-size:.76rem;font-weight:750;padding:0 6px}.onboarding-step .field{margin-bottom:10px}.onboarding-step .field:last-child{margin-bottom:0}.profile-actions{display:flex;align-items:center;gap:12px;margin-top:14px}.wide-field{grid-column:1/-1}.compliance-layout{display:grid;grid-template-columns:minmax(620px,1.5fr) minmax(300px,.7fr);gap:16px;align-items:start}.compliance-row{display:grid;grid-template-columns:minmax(220px,1.4fr) repeat(3,minmax(120px,.55fr)) auto;gap:10px;padding:14px 16px;border-top:1px solid var(--line);align-items:start}.compliance-row:first-child{border-top:0}.compliance-row input,.compliance-row select{width:100%;height:39px;padding:8px;border:1px solid #bfc4c0;border-radius:6px;background:white}.citation{margin-top:7px;padding:9px;background:#f7f5f0;border-left:3px solid #7d948c;font-size:.78rem}.amendment-panel{margin-bottom:16px;padding:16px}.amendment-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.amendment-change{border:1px solid var(--line);border-radius:6px;padding:12px}.document-viewer{position:sticky;top:84px;max-height:70vh;overflow:auto}.document-page{white-space:pre-wrap;font:0.8rem/1.5 ui-monospace,monospace;background:#f7f5f0;padding:12px;border-radius:6px}.hidden{display:none!important}
+    @media(max-width:1050px){.opportunity-layout,.compliance-layout{grid-template-columns:1fr}.detail-card,.document-viewer{position:static}.compliance-row{grid-template-columns:1fr 1fr}.summary-strip{grid-template-columns:1fr 1fr}.summary-item:nth-child(2){border-right:0}.summary-item:nth-child(-n+2){border-bottom:1px solid var(--line)}.onboarding-grid{grid-template-columns:1fr}}
+    @media(max-width:680px){.app-shell{display:block}.sidebar{position:sticky;z-index:10;width:100%;height:auto;padding:10px 14px;gap:8px}.brand small,.sidebar-footer{display:none}.brand{font-size:1rem}.nav{display:flex;overflow-x:auto}.nav a{white-space:nowrap;padding:8px}.topbar{padding:0 16px}main{padding:20px 14px}.page-heading{align-items:flex-start;flex-direction:column}.summary-strip{grid-template-columns:1fr}.summary-item{border-right:0;border-bottom:1px solid var(--line)}.opportunity-layout{display:block}.detail-card{margin-top:14px}.task-grid{grid-template-columns:1fr}.filter-form button{flex:1}.opportunity-table th:nth-child(2),.opportunity-table td:nth-child(2){display:none}}
   </style>
 </head>
 <body>
-<main>
-  <header>
-    <div><div class="eyebrow">Evidence-grounded bid intelligence</div><h1>ContractFit</h1><p class="subtle">Rank government opportunities against real contractor constraints, with every decision linked to source evidence.</p></div>
-    <button type="button" id="reset-demo">Reset demo</button>
-  </header>
-
-  <section class="card auth-card" aria-labelledby="auth-heading">
-    <div class="eyebrow">Secure workspace</div>
-    <h2 id="auth-heading">Reviewer sign in</h2>
-    <form id="auth-form" class="auth-form">
-      <div class="field"><label for="auth-email">Email</label><input id="auth-email" type="email" value="demo@contractfit.local" autocomplete="username" required></div>
-      <div class="field"><label for="auth-password">Password</label><input id="auth-password" type="password" value="contractfit-demo-password" autocomplete="current-password" required></div>
-      <button type="submit">Sign in</button>
-      <button type="button" class="secondary" id="sign-out">Sign out</button>
-    </form>
-    <p id="auth-status" class="upload-state" role="status" aria-live="polite"></p>
-  </section>
-
-  <section class="card upload-card" aria-labelledby="upload-heading">
-    <div class="eyebrow">Document intelligence</div>
-    <h2 id="upload-heading">Analyze a solicitation</h2>
-    <p class="subtle">Upload a PDF, DOCX, or TXT solicitation. ContractFit will extract the opportunity and refresh its fit analysis.</p>
-    <form id="upload-form" class="upload-form">
-      <div class="field">
-        <label for="document-file">Solicitation document</label>
-        <input id="document-file" name="file" type="file" accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" required aria-describedby="file-help upload-status">
-        <small id="file-help" class="subtle">Accepted formats: PDF, DOCX, and TXT.</small>
-      </div>
-      <button type="submit" id="upload-button">Upload and analyze</button>
-    </form>
-    <div id="upload-progress-wrap" class="progress-wrap" aria-hidden="true">
-      <progress id="upload-progress" max="100" value="0">0%</progress>
-    </div>
-    <p id="upload-status" class="upload-state" role="status" aria-live="polite"></p>
-  </section>
-
-  <section class="grid" id="summary" aria-label="Dashboard summary"></section>
-  <h2>Needs human review</h2>
-  <section class="grid" id="reviews" aria-live="polite"></section>
-  <h2>Ranked opportunities</h2>
-  <section class="grid" id="matches" aria-live="polite"></section>
-</main>
+<div class="app-shell">
+  <aside class="sidebar" aria-label="Primary navigation">
+    <div class="brand"><span>ContractFit</span><small>Bid workspace</small></div>
+    <nav class="nav"><a href="#opportunities" aria-current="page" aria-label="Go to opportunities" title="Opportunities"><span class="nav-icon" aria-hidden="true">⌕</span><span>Opportunities</span></a><a href="#profile" aria-label="Go to company profile" title="Company profile"><span class="nav-icon" aria-hidden="true">◇</span><span>Company profile</span></a><a href="#qualification" aria-label="Go to qualification queue" title="Qualification queue"><span class="nav-icon" aria-hidden="true">◫</span><span>Qualification</span></a><a href="#compliance" aria-label="Go to compliance workspace" title="Compliance"><span class="nav-icon" aria-hidden="true">☷</span><span>Compliance</span></a><a href="#alerts" aria-label="Go to alerts" title="Alerts"><span class="nav-icon" aria-hidden="true">!</span><span>Alerts</span></a><a href="#pipeline" aria-label="Go to bid pipeline" title="Bid pipeline"><span class="nav-icon" aria-hidden="true">→</span><span>Pipeline</span></a><a href="#reviews" aria-label="Go to human reviews" title="Human reviews"><span class="nav-icon" aria-hidden="true">✓</span><span>Reviews</span></a><a href="#documents" aria-label="Go to document upload" title="Documents"><span class="nav-icon" aria-hidden="true">▤</span><span>Documents</span></a></nav>
+    <div class="sidebar-footer">Federal opportunity qualification<br>with source-level evidence</div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar"><h1>Opportunity workspace</h1><div class="workspace-meta" id="workspace-status">Local demo workspace</div></header>
+    <main>
+      <div class="page-heading" id="opportunities"><div><h2>Opportunities</h2><p>Decide where to invest bid time, with each recommendation tied to a requirement.</p></div><button type="button" class="secondary" id="reset-demo">Reset demo</button></div>
+      <section class="summary-strip" id="summary" aria-label="Workspace summary"></section>
+      <section class="card onboarding-card" id="profile" aria-labelledby="profile-heading"><div class="eyebrow">Company onboarding</div><h2 id="profile-heading">Build your qualification profile</h2><p class="subtle">ContractFit uses these facts to distinguish a verified fit from missing proof. Separate multiple values with commas.</p><div class="onboarding-progress"><progress id="profile-progress" max="100" value="0">0%</progress><strong id="profile-progress-label">0% complete</strong><span class="subtle" id="profile-missing"></span></div><form id="profile-form"><div class="onboarding-grid">
+        <fieldset class="onboarding-step"><legend>1 · Services and territory</legend><div class="field"><label for="profile-name">Company name</label><input id="profile-name" name="name" required maxlength="255"></div><div class="field"><label for="profile-services">Services</label><input id="profile-services" name="service_categories" placeholder="HVAC, preventive maintenance" required></div><div class="field"><label for="profile-states">States served</label><input id="profile-states" name="states" placeholder="Texas, Oklahoma" required></div><div class="field"><label for="profile-distance">Maximum travel distance (miles)</label><input id="profile-distance" name="maximum_distance_miles" type="number" min="0"></div><div class="field"><label for="profile-naics">NAICS codes</label><input id="profile-naics" name="naics_codes" placeholder="238220, 561210"></div></fieldset>
+        <fieldset class="onboarding-step"><legend>2 · Capacity and credentials</legend><div class="field"><label for="profile-min-value">Minimum contract value</label><input id="profile-min-value" name="minimum_contract_value" type="number" min="0"></div><div class="field"><label for="profile-max-value">Maximum contract value</label><input id="profile-max-value" name="maximum_contract_value" type="number" min="0"></div><div class="field"><label for="profile-licenses">Licenses</label><input id="profile-licenses" name="licenses"></div><div class="field"><label for="profile-certifications">Certifications</label><input id="profile-certifications" name="certifications"></div><div class="field"><label for="profile-insurance">Insurance coverage</label><input id="profile-insurance" name="insurance_coverages" placeholder="General liability, workers compensation"></div><div class="field"><label for="profile-set-asides">Set-aside status</label><input id="profile-set-asides" name="set_asides" placeholder="Small Business, WOSB"></div></fieldset>
+        <fieldset class="onboarding-step"><legend>3 · Evidence and preferences</legend><div class="field"><label for="profile-preferences">Contract preferences</label><input id="profile-preferences" name="contract_preferences" placeholder="Federal facilities, recurring maintenance"></div><div class="field"><label for="profile-capability">Capability statement</label><textarea id="profile-capability" name="capability_statement" required></textarea></div><div class="field"><label for="project-title">Past project</label><input id="project-title" name="project_title" placeholder="Public facility HVAC maintenance"></div><div class="field"><label for="project-client">Client</label><input id="project-client" name="project_client"></div><div class="field"><label for="project-description">Project evidence</label><textarea id="project-description" name="project_description" placeholder="Scope delivered, results, and relevant equipment"></textarea></div><div class="field"><label for="project-services">Project services</label><input id="project-services" name="project_services"></div><div class="field"><label for="project-state">Project state</label><input id="project-state" name="project_state"></div><div class="field"><label for="project-value">Project value</label><input id="project-value" name="project_value" type="number" min="0"></div><div class="field"><label for="project-start">Start date</label><input id="project-start" name="project_start" type="date"></div><div class="field"><label for="project-end">End date</label><input id="project-end" name="project_end" type="date"></div><label class="checkbox-field"><input name="project_reference" type="checkbox"> Reference available</label></fieldset>
+      </div><div class="profile-actions"><button type="submit" id="profile-save">Save profile and recalculate</button><span class="upload-state" id="profile-status" role="status" aria-live="polite"></span></div></form></section>
+      <section class="card filter-card" aria-labelledby="catalog-heading">
+        <form id="filter-form" class="filter-form"><span id="catalog-heading" class="eyebrow">Filter synchronized opportunities</span><div class="field"><label for="filter-query">Keywords</label><input id="filter-query" type="search" placeholder="HVAC, 238220, agency…"></div><div class="field"><label for="filter-source">Source</label><select id="filter-source"><option value="">All sources</option><option value="sam.gov">SAM.gov</option><option value="uploaded_document">Uploaded documents</option></select></div><div class="field"><label for="filter-deadline">Deadline</label><select id="filter-deadline"><option value="">Any status</option><option value="active">Open</option><option value="expired">Expired</option><option value="unknown">Unknown</option></select></div><label class="checkbox-field"><input id="filter-set-aside" type="checkbox"> Set-aside only</label><button type="submit">Apply</button><button type="button" class="secondary" id="clear-filters">Clear</button></form>
+      </section>
+      <section class="opportunity-layout" id="qualification">
+        <div class="card table-card"><div class="table-header"><h3>Qualification queue</h3><span class="count" id="catalog-count"></span></div><div id="catalog" class="table-wrap" aria-live="polite"></div></div>
+        <aside id="matches" class="card detail-card" aria-live="polite"><p class="empty">Select an opportunity to review the recommendation.</p></aside>
+      </section>
+      <section class="task-section" id="pipeline"><div class="section-heading"><div><div class="eyebrow">Bid workflow</div><h2>Opportunity pipeline</h2></div><span class="count" id="pipeline-count"></span></div><div class="card table-card" id="pipeline-list" aria-live="polite"><p class="empty">Add an opportunity to start tracking it.</p></div></section>
+      <section class="task-section hidden" id="compliance"><div class="section-heading"><div><div class="eyebrow">Compliance workspace</div><h2 id="compliance-title">Opportunity requirements</h2><p class="subtle" id="compliance-summary"></p></div><div class="actions"><button type="button" class="secondary hidden" id="compare-amendments">Compare amendments</button><button type="button" class="secondary" id="export-compliance">Export CSV</button><button type="button" class="secondary" id="close-compliance">Close workspace</button></div></div><div class="card amendment-panel hidden" id="amendment-comparison" aria-live="polite"></div><div class="compliance-layout"><div class="card table-card" id="compliance-matrix" aria-live="polite"></div><aside class="card document-viewer" id="document-viewer" aria-live="polite"><p class="empty">Choose a source page from a requirement.</p></aside></div></section>
+      <section class="task-section" id="alerts"><div class="section-heading"><div><div class="eyebrow">Monitoring</div><h2>Deadline and amendment alerts</h2></div><span class="count" id="alert-count"></span></div><form class="card filter-form" id="notification-form"><label class="checkbox-field"><input name="enabled" type="checkbox"> Email notifications</label><div class="field"><label for="notification-email">Recipient</label><input id="notification-email" name="recipient_email" type="email" required></div><button type="submit">Save notifications</button><span class="upload-state" id="notification-status" role="status"></span></form><div class="card review-list" id="alert-list" aria-live="polite"><p class="empty">Watch an opportunity to monitor changes.</p></div></section>
+      <section class="task-section" id="reviews"><div class="section-heading"><div><div class="eyebrow">Verification queue</div><h2>Needs human review</h2></div></div><div class="task-grid"><div class="card review-list" id="review-list" aria-live="polite"></div><div>
+        <section class="card" id="documents" aria-labelledby="upload-heading"><div class="eyebrow">Documents</div><h3 id="upload-heading">Add a solicitation</h3><p class="subtle">Upload a PDF, DOCX, or TXT file to extract its requirements and add it to the qualification queue.</p><form id="upload-form" class="upload-form"><div class="field"><label for="document-file">Solicitation document</label><input id="document-file" name="file" type="file" accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" required aria-describedby="file-help upload-status"><small id="file-help" class="subtle">PDF, DOCX, or TXT</small></div><button type="submit" id="upload-button">Analyze document</button></form><div id="upload-progress-wrap" class="progress-wrap" aria-hidden="true"><progress id="upload-progress" max="100" value="0">0%</progress></div><p id="upload-status" class="upload-state" role="status" aria-live="polite"></p></section>
+        <section class="card auth-card" aria-labelledby="auth-heading"><div class="eyebrow">Workspace access</div><h3 id="auth-heading">Reviewer account</h3><p class="subtle">All demo companies and opportunities are synthetic unless explicitly identified as a public SAM.gov record.</p><form id="auth-form" class="auth-form"><div class="field"><label for="demo-company">Synthetic company</label><select id="demo-company"><option value="demo@contractfit.local">Lone Star Facility Services</option><option value="demo+cleaning@contractfit.local">Ozark Civic Cleaning</option><option value="demo+grounds@contractfit.local">Prairie Green Grounds</option><option value="demo+electrical@contractfit.local">Delta Public Power Services</option><option value="demo+plumbing@contractfit.local">GulfLine Plumbing &amp; Backflow</option></select></div><div class="field"><label for="auth-email">Email</label><input id="auth-email" type="email" value="demo@contractfit.local" autocomplete="username" required></div><div class="field"><label for="auth-password">Password</label><input id="auth-password" type="password" value="contractfit-demo-password" autocomplete="current-password" required></div><button type="submit">Sign in</button><button type="button" class="secondary" id="sign-out">Sign out</button></form><p id="auth-status" class="upload-state" role="status" aria-live="polite"></p></section>
+      </div></div></section>
+    </main>
+  </div>
+</div>
 <script>
 const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const finiteNumber=(value,fallback=0)=>Number.isFinite(Number(value))?Number(value):fallback;
 async function json(response){if(!response.ok)throw new Error(`Request failed (${response.status})`);return response.json()}
 const authToken=()=>localStorage.getItem('contractfit-access-token');
 const authFetch=(url,options={})=>fetch(url,{...options,headers:{...(options.headers||{}),...(authToken()?{Authorization:`Bearer ${authToken()}`}:{})}});
+const safeUrl=value=>{try{const url=new URL(value);return ['http:','https:'].includes(url.protocol)?url.href:null}catch{return null}};
+const csv=value=>String(value||'').split(',').map(item=>item.trim()).filter(Boolean);
+const optionalJson=async(response,empty)=>[404,409].includes(response.status)?empty:json(response);
+let opportunityFilters={};
+let selectedOpportunityId=null;
+let workspaceData={profile:null,opportunities:[],allOpportunities:[],matchesById:{},pipelineByOpportunity:{},watchByOpportunity:{}};
+let currentUser=null;
+let complianceWorkspace=null;
+let amendmentComparison=null;
+function renderProfile(profile,completeness){
+  const form=document.querySelector('#profile-form');
+  const project=profile?.past_performance?.[0]||{};
+  const values={name:profile?.name||'',service_categories:profile?.service_categories?.join(', ')||'',states:profile?.states?.join(', ')||'',maximum_distance_miles:profile?.maximum_distance_miles??'',naics_codes:profile?.naics_codes?.join(', ')||'',minimum_contract_value:profile?.minimum_contract_value??'',maximum_contract_value:profile?.maximum_contract_value??'',licenses:profile?.licenses?.join(', ')||'',certifications:profile?.certifications?.join(', ')||'',insurance_coverages:profile?.insurance_coverages?.join(', ')||'',set_asides:profile?.set_asides?.join(', ')||'',contract_preferences:profile?.contract_preferences?.join(', ')||'',capability_statement:profile?.capability_statement||'',project_title:project.title||'',project_client:project.client||'',project_description:project.description||'',project_services:project.service_categories?.join(', ')||'',project_state:project.state||'',project_value:project.contract_value??'',project_start:project.start_date||'',project_end:project.end_date||''};
+  Object.entries(values).forEach(([name,value])=>{if(form.elements[name])form.elements[name].value=value});
+  form.elements.project_reference.checked=Boolean(project.reference_available);
+  const percentage=finiteNumber(completeness?.percentage);
+  document.querySelector('#profile-progress').value=percentage;
+  document.querySelector('#profile-progress-label').textContent=`${percentage}% complete`;
+  document.querySelector('#profile-missing').textContent=completeness?.missing_sections?.length?`Missing: ${completeness.missing_sections.join(', ')}`:'Ready for calibrated matching';
+}
+const opportunityEndpoint=()=>{const params=new URLSearchParams(Object.entries(opportunityFilters).filter(([,value])=>value!==''&&value!==null&&value!==undefined));return `/api/opportunities${params.size?`?${params}`:''}`};
+const decisionFor=match=>{
+  if(!match)return{label:'Review',className:'review'};
+  if(match.eligibility==='ineligible')return{label:'No-go',className:'no-go'};
+  if(match.eligibility==='eligible'&&finiteNumber(match.fit_score)>=70)return{label:'Pursue',className:'pursue'};
+  return{label:'Review',className:'review'};
+};
+const gateLabel=value=>({deadline:'Deadline',location:'Service area',set_aside:'Set-aside',certification:'Licenses and certifications',contract_value:'Contract value',past_performance:'Past performance'}[value]||String(value||'Requirement').replaceAll('_',' '));
+const statusLabel=value=>({eligible:'Meets requirement',ineligible:'Does not meet',needs_review:'Needs review'}[value]||String(value||'Needs review').replaceAll('_',' '));
+const pipelineStatusLabel=value=>({new:'New',evaluating:'Evaluating',pursue:'Pursue',no_go:'No-go',preparing_bid:'Preparing bid',submitted:'Submitted'}[value]||value);
+const pipelineStatusOptions=current=>['new','evaluating','pursue','no_go','preparing_bid','submitted'].map(value=>`<option value="${value}" ${value===current?'selected':''}>${pipelineStatusLabel(value)}</option>`).join('');
+function renderOpportunityDetail(opportunityId){
+  const opportunity=workspaceData.opportunities.find(item=>item.id===opportunityId);
+  if(!opportunity){document.querySelector('#matches').innerHTML='<p class="empty">Select an opportunity to review the recommendation.</p>';return}
+  const match=workspaceData.matchesById[opportunity.id];
+  const decision=decisionFor(match);
+  const url=safeUrl(opportunity.source_url);
+  const strengths=Array.isArray(match?.strengths)?match.strengths:[];
+  const gaps=Array.isArray(match?.gaps)?match.gaps:[];
+  const gates=Array.isArray(match?.gates)?match.gates:[];
+  const pipelineItem=workspaceData.pipelineByOpportunity[opportunity.id];
+  const watched=workspaceData.watchByOpportunity[opportunity.id];
+  document.querySelector('#matches').innerHTML=`<div class="detail-head"><span class="decision decision-${decision.className}">${decision.label}</span><h3>${esc(opportunity.title)}</h3><div class="subtle">${esc(opportunity.agency||'Agency not provided')}</div></div><div class="detail-body"><div class="detail-grid"><div><div class="detail-label">Fit</div><div class="detail-value">${match?`${finiteNumber(match.fit_score)}/100`:'Not scored'}</div></div><div><div class="detail-label">Deadline</div><div class="detail-value">${esc(opportunity.response_deadline||'Unknown')}</div></div><div><div class="detail-label">Place of performance</div><div class="detail-value">${esc(opportunity.place_of_performance||'Not provided')}</div></div><div><div class="detail-label">Set-aside</div><div class="detail-value">${esc(opportunity.set_aside||'None reported')}</div></div></div><p>${esc(match?.explanation||opportunity.scope||'Detailed qualification is not available yet.')}</p><div class="actions">${pipelineItem?`<a class="button-link" href="#pipeline">In pipeline · ${esc(pipelineStatusLabel(pipelineItem.status))}</a>`:`<button type="button" data-pipeline-add="${esc(opportunity.id)}">Add to pipeline</button>`}<button type="button" class="secondary" data-workspace-open="${esc(opportunity.id)}">Open compliance workspace</button><button type="button" class="secondary" data-watch-action="${watched?'remove':'add'}" data-opportunity-id="${esc(opportunity.id)}">${watched?'Stop watching':'Watch changes'}</button></div>${strengths.length?`<div class="detail-section"><h4>Reasons to pursue</h4><ul class="plain-list">${strengths.map(item=>`<li>${esc(item)}</li>`).join('')}</ul></div>`:''}${gaps.length?`<div class="detail-section"><h4>Risks and missing proof</h4><ul class="plain-list">${gaps.map(item=>`<li>${esc(item)}</li>`).join('')}</ul></div>`:''}${gates.length?`<div class="detail-section"><h4>Qualification checks</h4>${gates.map(gate=>`<div class="gate"><span>${esc(gateLabel(gate.name))}<span class="gate-reason">${esc(gate.reason||'No explanation provided.')}</span></span><strong>${esc(statusLabel(gate.status))}</strong></div>`).join('')}</div>`:''}<div class="detail-section"><h4>Your relevance feedback</h4><form data-feedback-form="${esc(opportunity.id)}"><fieldset><legend class="subtle">How relevant is this opportunity?</legend><div class="feedback-options"><label><input type="radio" name="rating" value="relevant" required> Relevant</label><label><input type="radio" name="rating" value="not_relevant"> Not relevant</label><label><input type="radio" name="rating" value="unsure"> Unsure</label></div><label class="field" for="feedback-reason-${esc(opportunity.id)}">Optional reason</label><textarea class="feedback-reason" id="feedback-reason-${esc(opportunity.id)}" name="reason" maxlength="1000"></textarea><button type="submit">Save feedback</button></fieldset><p class="upload-state" data-feedback-status role="status" aria-live="polite">Loading feedback…</p></form></div><div class="detail-section"><h4>Source and documents</h4><div class="actions">${url?`<a class="button-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">Open source</a>`:''}${opportunity.source==='sam.gov'?`<button type="button" class="secondary" data-attachment-action="list" data-opportunity-id="${esc(opportunity.id)}">View documents</button>`:''}</div><div id="attachments-${esc(opportunity.id)}" class="upload-state" aria-live="polite"></div></div>${match?`<p class="summary-copy">Scoring method: ${esc(match.scoring_method)}</p>`:''}</div>`;
+  loadOpportunityFeedback(opportunity.id);
+}
+
+async function loadOpportunityFeedback(opportunityId){
+  const form=document.querySelector(`[data-feedback-form="${CSS.escape(opportunityId)}"]`);
+  if(!form)return;
+  const status=form.querySelector('[data-feedback-status]');
+  if(!authToken()){status.textContent='Sign in to save feedback.';form.querySelector('fieldset').disabled=true;return}
+  try{
+    const response=await authFetch(`/api/opportunities/${encodeURIComponent(opportunityId)}/feedback`);
+    if(!form.isConnected)return;
+    if(response.status===404){status.textContent='No feedback saved yet.';return}
+    const feedback=await json(response);
+    form.elements.rating.value=feedback.rating;
+    form.elements.reason.value=feedback.reason||'';
+    status.textContent='Saved feedback loaded.';
+    status.dataset.kind='success';
+  }catch(error){if(form.isConnected){status.textContent=error instanceof Error?error.message:'Unable to load feedback.';status.dataset.kind='error'}}
+}
+
+async function saveOpportunityFeedback(event){
+  const form=event.target.closest('[data-feedback-form]');
+  if(!form)return;
+  event.preventDefault();
+  const status=form.querySelector('[data-feedback-status]');
+  const button=form.querySelector('button[type="submit"]');
+  status.textContent='Saving feedback…';
+  button.disabled=true;
+  try{
+    const feedback=await authFetch(`/api/opportunities/${encodeURIComponent(form.dataset.feedbackForm)}/feedback`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({rating:form.elements.rating.value,reason:form.elements.reason.value.trim()||null})}).then(json);
+    form.elements.rating.value=feedback.rating;
+    form.elements.reason.value=feedback.reason||'';
+    status.textContent='Feedback saved.';
+    status.dataset.kind='success';
+  }catch(error){status.textContent=error instanceof Error?error.message:'Unable to save feedback.';status.dataset.kind='error'}
+  finally{button.disabled=false}
+}
+const complianceStatusOptions=current=>['pending','covered','missing_evidence','not_applicable'].map(value=>`<option value="${value}" ${value===current?'selected':''}>${esc(value.replaceAll('_',' '))}</option>`).join('');
+const priorityOptions=current=>['mandatory','recommended'].map(value=>`<option value="${value}" ${value===current?'selected':''}>${esc(value)}</option>`).join('');
+function renderComplianceWorkspace(workspace){
+  complianceWorkspace=workspace;
+  const section=document.querySelector('#compliance');
+  section.classList.remove('hidden');
+  document.querySelector('#compliance-title').textContent=workspace.opportunity.title;
+  document.querySelector('#compliance-summary').textContent=`${workspace.compliance_items.length} requirements · source citations are locked to the original document`;
+  document.querySelector('#compare-amendments').classList.toggle('hidden',workspace.opportunity.source!=='sam.gov');
+  document.querySelector('#amendment-comparison').classList.add('hidden');
+  document.querySelector('#compliance-matrix').innerHTML=workspace.compliance_items.length?workspace.compliance_items.map(item=>{
+    const citation=item.source_evidence;
+    const business=item.business_evidence?.[0]?.description||'';
+    return `<form class="compliance-row" data-compliance-item="${esc(item.id)}"><div><strong>${esc(item.description)}</strong><div class="summary-copy">${esc(item.category)}</div><div class="citation">“${esc(citation.supporting_text)}”<div>${esc(citation.section||'No section')}${citation.page?` · page ${citation.page}`:''}</div>${citation.page?`<button type="button" class="secondary" data-document-page="${esc(citation.document_id)}" data-page-number="${citation.page}">View source page</button>`:''}</div><label class="field"><span>Company evidence</span><input name="business_evidence" value="${esc(business)}" maxlength="1000" placeholder="Select or enter verified company evidence"></label><label class="field"><span>Notes</span><input name="notes" value="${esc(item.notes||'')}" maxlength="4000"></label></div><label class="field"><span>Status</span><select name="status">${complianceStatusOptions(item.status)}</select></label><label class="field"><span>Requirement</span><select name="priority">${priorityOptions(item.priority)}</select></label><div><label class="field"><span>Due date</span><input name="due_date" type="date" value="${esc(item.due_date||'')}"></label><label class="field"><span>Owner</span><select name="owner_user_id"><option value="">Unassigned</option>${currentUser?`<option value="${esc(currentUser.user_id)}" ${item.owner_user_id===currentUser.user_id?'selected':''}>${esc(currentUser.display_name)}</option>`:''}</select></label></div><button type="submit">Save</button></form>`;
+  }).join(''):`<div class="empty"><p>No extracted requirements are available yet.</p><p>Analyze an owned solicitation document first. ContractFit does not invent compliance rows without source evidence.</p></div>`;
+  location.hash='compliance';
+}
+async function openComplianceWorkspace(event){
+  const button=event.target.closest('[data-workspace-open]');
+  if(!button)return;
+  button.disabled=true;
+  try{
+    let workspace=await authFetch(`/api/opportunities/${encodeURIComponent(button.dataset.workspaceOpen)}`).then(json);
+    if(!workspace.compliance_items.length&&['pursue','preparing_bid','submitted'].includes(workspace.pipeline_item?.status)){
+      workspace.compliance_items=await authFetch(`/api/opportunities/${encodeURIComponent(button.dataset.workspaceOpen)}/compliance/initialize`,{method:'POST'}).then(json);
+    }
+    renderComplianceWorkspace(workspace);
+  }catch(error){alert(error instanceof Error?error.message:'Unable to open the compliance workspace.');button.disabled=false}
+}
+async function saveComplianceItem(event){
+  const form=event.target.closest('[data-compliance-item]');
+  if(!form)return;
+  event.preventDefault();
+  const button=form.querySelector('button[type="submit"]');
+  const description=form.elements.business_evidence.value.trim();
+  const existingItem=complianceWorkspace.compliance_items.find(item=>item.id===form.dataset.complianceItem);
+  const existingEvidence=existingItem?.business_evidence||[];
+  const firstEvidence=existingEvidence[0];
+  const evidenceChanged=description!==(firstEvidence?.description||'');
+  const payload={status:form.elements.status.value,priority:form.elements.priority.value,owner_user_id:form.elements.owner_user_id.value||null,due_date:form.elements.due_date.value||null,notes:form.elements.notes.value.trim()||null};
+  if(evidenceChanged)payload.business_evidence=[...(description?[{kind:firstEvidence?.kind||'user_provided',reference_id:firstEvidence?.reference_id||null,description}]:[]),...existingEvidence.slice(1)];
+  button.disabled=true;
+  try{
+    await authFetch(`/api/compliance/items/${encodeURIComponent(form.dataset.complianceItem)}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(json);
+    const workspace=await authFetch(`/api/opportunities/${encodeURIComponent(complianceWorkspace.opportunity.id)}`).then(json);
+    renderComplianceWorkspace(workspace);
+  }catch(error){alert(error instanceof Error?error.message:'Unable to save the compliance row.');button.disabled=false}
+}
+async function showDocumentPage(event){
+  const button=event.target.closest('[data-document-page]');
+  if(!button)return;
+  const viewer=document.querySelector('#document-viewer');
+  viewer.innerHTML='<p class="empty">Loading source page…</p>';
+  try{
+    const pages=await authFetch(`/api/documents/${encodeURIComponent(button.dataset.documentPage)}/pages`).then(json);
+    const page=pages.find(item=>String(item.page_number)===String(button.dataset.pageNumber));
+    viewer.innerHTML=page?`<div class="eyebrow">Original document</div><h3>Page ${esc(page.page_number)}</h3><p class="document-page">${esc(page.text||'No text was extracted from this page.')}</p>`:'<p class="empty">The cited page is not available.</p>';
+  }catch(error){viewer.innerHTML=`<p class="empty">${esc(error instanceof Error?error.message:'Unable to load the source page.')}</p>`}
+}
+async function exportComplianceMatrix(){
+  if(!complianceWorkspace)return;
+  const button=document.querySelector('#export-compliance');
+  button.disabled=true;
+  try{
+    const response=await authFetch(`/api/opportunities/${encodeURIComponent(complianceWorkspace.opportunity.id)}/compliance/export.csv`);
+    const blob=await response.blob();
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement('a');
+    link.href=url;
+    link.download=`compliance-${complianceWorkspace.opportunity.id}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }catch(error){alert(error instanceof Error?error.message:'Unable to export the compliance matrix.')}finally{button.disabled=false}
+}
+const amendmentVersion=(version,label)=>version?`<div><div class="detail-label">${label}</div><strong>${esc(version.description)}</strong><div class="summary-copy">${esc(version.category)} · ${version.mandatory?'mandatory':'recommended'}</div><div class="citation">“${esc(version.evidence.supporting_text)}”<div>${esc(version.evidence.section||'No section')}${version.evidence.page?` · page ${version.evidence.page}`:''}</div>${version.evidence.page?`<button type="button" class="secondary" data-document-page="${esc(version.evidence.document_id)}" data-page-number="${version.evidence.page}">View source page</button>`:''}</div></div>`:`<div><div class="detail-label">${label}</div><span class="subtle">Not present</span></div>`;
+async function compareAmendments(){
+  if(!complianceWorkspace)return;
+  const button=document.querySelector('#compare-amendments');
+  const panel=document.querySelector('#amendment-comparison');
+  button.disabled=true;panel.classList.remove('hidden');panel.innerHTML='<p class="empty">Comparing the two latest SAM.gov snapshots…</p>';
+  try{
+    const comparison=await authFetch(`/api/opportunities/${encodeURIComponent(complianceWorkspace.opportunity.id)}/amendments/compare`).then(json);
+    amendmentComparison=comparison;
+    const material=comparison.requirement_changes.filter(item=>item.change_type!=='unchanged');
+    const metadata=comparison.metadata_changes.map(item=>`<li><strong>${esc(item.field)}</strong>: ${esc(item.previous??'not present')} → ${esc(item.current??'not present')}</li>`).join('');
+    panel.innerHTML=`<div class="eyebrow">Amendment comparison</div><h3>${material.length} requirement changes · ${comparison.metadata_changes.length} catalog changes</h3><p class="subtle">${esc(comparison.previous_snapshot.observed_at)} → ${esc(comparison.current_snapshot.observed_at)}</p>${metadata?`<h4>Catalog fields</h4><ul class="plain-list">${metadata}</ul>`:''}<h4>Requirements</h4>${material.length?`<div class="amendment-grid">${material.map(item=>`<article class="amendment-change"><label class="checkbox-field"><input type="checkbox" data-amendment-selection data-change-type="${esc(item.change_type)}" data-previous-requirement="${esc(item.previous?.id||'')}" data-current-requirement="${esc(item.current?.id||'')}"> Apply ${esc(item.change_type)} change</label>${amendmentVersion(item.previous,'Previous')}${amendmentVersion(item.current,'Current')}</article>`).join('')}</div><div class="actions"><button type="button" data-apply-amendment>Apply selected changes</button></div>`:'<p class="empty">No deterministic requirement changes were found in analyzed attachments.</p>'}<p class="summary-copy">${comparison.limitations.map(esc).join(' ')}</p>`;
+  }catch(error){panel.innerHTML=`<p class="empty">${esc(error instanceof Error?error.message:'Unable to compare amendments.')}</p>`}finally{button.disabled=false}
+}
+async function applySelectedAmendment(event){
+  const button=event.target.closest('[data-apply-amendment]');
+  if(!button||!complianceWorkspace||!amendmentComparison)return;
+  const selections=[...document.querySelectorAll('[data-amendment-selection]:checked')].map(input=>({change_type:input.dataset.changeType,previous_requirement_id:input.dataset.previousRequirement||null,current_requirement_id:input.dataset.currentRequirement||null}));
+  if(!selections.length){alert('Select at least one material requirement change.');return}
+  button.disabled=true;
+  try{
+    const result=await authFetch(`/api/opportunities/${encodeURIComponent(complianceWorkspace.opportunity.id)}/amendments/acknowledge`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({previous_snapshot_id:amendmentComparison.previous_snapshot.id,current_snapshot_id:amendmentComparison.current_snapshot.id,selections})}).then(json);
+    complianceWorkspace.compliance_items=result.compliance_items;
+    renderComplianceWorkspace(complianceWorkspace);
+    alert('Selected amendment changes were recorded and applied to the compliance matrix.');
+  }catch(error){alert(error instanceof Error?error.message:'Unable to apply amendment changes.');button.disabled=false}
+}
 async function load(){
   try{
-    const[p,o,m,e,jobs]=await Promise.all([
-      authFetch('/api/profile').then(json),
+    currentUser=null;
+    const[p,completeness,o,allOpportunities,m,e,pipelineItems,watches,alerts,notificationPreference,deliveries]=await Promise.all([
+      authFetch('/api/profile').then(response=>optionalJson(response,null)),
+      authFetch('/api/profile/completeness').then(json),
+      authFetch(opportunityEndpoint()).then(json),
       authFetch('/api/opportunities').then(json),
-      authFetch('/api/matches').then(json),
-      authFetch('/api/evaluation').then(json),
-      authFetch('/api/processing-jobs').then(json)
+      authFetch('/api/matches').then(response=>optionalJson(response,[])),
+      authFetch('/api/evaluation').then(response=>optionalJson(response,{citation_validity:0})),
+      authFetch('/api/pipeline/items').then(json),
+      authFetch('/api/watches').then(json),
+      authFetch('/api/alerts').then(json),
+      authFetch('/api/notification-preferences').then(json),
+      authFetch('/api/notification-deliveries').then(json)
     ]);
-    const activeJobs=jobs.filter(job=>['queued','processing'].includes(job.status)).length;
     let reviews=[];
     if(authToken()){
       try{
         const me=await authFetch('/api/auth/me').then(json);
+        currentUser=me;
         document.querySelector('#auth-status').textContent=`Signed in as ${me.display_name} · ${me.organization_name}`;
         document.querySelector('#auth-status').dataset.kind='success';
         reviews=await authFetch('/api/reviews?status=pending').then(json);
       }catch(error){localStorage.removeItem('contractfit-access-token');document.querySelector('#auth-status').textContent='Your session expired. Sign in again.';document.querySelector('#auth-status').dataset.kind='error'}
     }
-    document.querySelector('#summary').innerHTML=`<article class="card"><div class="eyebrow">Contractor</div><h3>${esc(p.name)}</h3><p>${esc(p.capability_statement)}</p></article><article class="card"><div class="eyebrow">Pipeline</div><div class="score">${finiteNumber(o.length)}</div><p>opportunities evaluated</p></article><article class="card"><div class="eyebrow">Processing</div><div class="score">${activeJobs}</div><p>active document jobs</p></article><article class="card"><div class="eyebrow">Evaluation</div><div class="score">${Math.round(finiteNumber(e.eligibility_accuracy)*100)}%</div><p>eligibility accuracy · ${Math.round(finiteNumber(e.citation_validity)*100)}% valid citations</p></article>`;
-    const byId=Object.fromEntries(o.map(item=>[item.id,item]));
-    const cards=m.sort((a,b)=>finiteNumber(b.fit_score)-finiteNumber(a.fit_score)).map(match=>{
-      const opportunity=byId[match.opportunity_id]??{};
-      const gates=Array.isArray(match.gates)?match.gates:[];
-      return `<article class="card"><span class="badge">${esc(match.eligibility)}</span><div class="score">${finiteNumber(match.fit_score)}</div><h3>${esc(opportunity.title||'Untitled opportunity')}</h3><p>${esc(match.explanation)}</p>${gates.map(gate=>`<div class="gate"><span>${esc(gate.name)}</span><strong>${esc(gate.status)}</strong></div>`).join('')}<p class="subtle">Scoring: ${esc(match.scoring_method)}</p></article>`;
-    }).join('');
-    document.querySelector('#matches').innerHTML=cards||'<p class="empty">Upload a solicitation to create the first opportunity match.</p>';
-    document.querySelector('#reviews').innerHTML=reviews.map(review=>`<article class="card"><span class="badge">${esc(review.priority)} priority</span><h3>${esc(review.field_name)}</h3><p>${esc(review.extracted_value||'No value extracted')}</p><p class="subtle">Confidence: ${Math.round(finiteNumber(review.confidence)*100)}% · ${esc(review.reason)}</p><p>${esc(review.evidence?.[0]?.supporting_text||'No evidence excerpt')}</p><div class="actions"><button type="button" data-review-action="resolve" data-review-id="${esc(review.id)}">Correct</button><button type="button" class="secondary" data-review-action="dismiss" data-review-id="${esc(review.id)}">Dismiss</button></div></article>`).join('')||(authToken()?'<p class="empty">No pending reviews. Low-confidence extractions will appear here.</p>':'<p class="empty">Sign in to view your organization’s review queue.</p>');
+    const matchesById=Object.fromEntries(m.map(item=>[item.opportunity_id,item]));
+    const pipelineByOpportunity=Object.fromEntries(pipelineItems.map(item=>[item.opportunity_id,item]));
+    const watchByOpportunity=Object.fromEntries(watches.map(item=>[item.opportunity_id,item]));
+    workspaceData={profile:p,opportunities:o,allOpportunities,matchesById,pipelineByOpportunity,watchByOpportunity};
+    renderProfile(p,completeness);
+    if(!o.some(item=>item.id===selectedOpportunityId))selectedOpportunityId=o[0]?.id||null;
+    const pursueCount=o.filter(item=>decisionFor(matchesById[item.id]).label==='Pursue').length;
+    const reviewCount=o.filter(item=>decisionFor(matchesById[item.id]).label==='Review').length;
+    const noGoCount=o.filter(item=>decisionFor(matchesById[item.id]).label==='No-go').length;
+    document.querySelector('#summary').innerHTML=`<div class="summary-item"><div class="eyebrow">Company profile</div><div class="summary-value">${esc(p?.name||'Complete onboarding')}</div><div class="summary-copy">${esc(p?.service_categories?.join(' · ')||`${finiteNumber(completeness.percentage)}% complete`)}</div></div><div class="summary-item"><div class="eyebrow">Pursue</div><div class="summary-value">${pursueCount}</div><div class="summary-copy">strong candidates</div></div><div class="summary-item"><div class="eyebrow">Review</div><div class="summary-value">${reviewCount}</div><div class="summary-copy">need a decision</div></div><div class="summary-item"><div class="eyebrow">No-go</div><div class="summary-value">${noGoCount}</div><div class="summary-copy">blocked or expired</div></div>`;
+    document.querySelector('#catalog-count').textContent=`${o.length} result${o.length===1?'':'s'} · ${Math.round(finiteNumber(e.citation_validity)*100)}% citation validity`;
+    document.querySelector('#catalog').innerHTML=o.length?`<table class="opportunity-table"><thead><tr><th>Opportunity</th><th>Deadline</th><th>Decision</th><th>Fit</th></tr></thead><tbody>${o.map(opportunity=>{
+      const match=matchesById[opportunity.id];
+      const decision=decisionFor(match);
+      return `<tr tabindex="0" class="${opportunity.id===selectedOpportunityId?'selected':''}" data-opportunity-select="${esc(opportunity.id)}"><td><span class="opportunity-title">${esc(opportunity.title)}</span><span class="opportunity-agency">${esc(opportunity.agency||'Agency not provided')} · ${esc(opportunity.source)}</span></td><td>${esc(opportunity.response_deadline||'Unknown')}</td><td><span class="decision decision-${decision.className}">${decision.label}</span></td><td class="fit">${match?finiteNumber(match.fit_score):'—'}</td></tr>`;
+    }).join('')}</tbody></table>`:'<p class="empty">No synchronized opportunities match these filters.</p>';
+    renderOpportunityDetail(selectedOpportunityId);
+    document.querySelector('#pipeline-count').textContent=`${pipelineItems.length} tracked`;
+    document.querySelector('#pipeline-list').innerHTML=pipelineItems.length?pipelineItems.map(item=>{
+      const opportunity=allOpportunities.find(candidate=>candidate.id===item.opportunity_id);
+      return `<form class="pipeline-form" data-pipeline-item="${esc(item.id)}"><div><strong>${esc(opportunity?.title||'Opportunity unavailable')}</strong><div class="summary-copy">Owner: current reviewer · Updated ${esc(new Date(item.updated_at).toLocaleDateString())}</div></div><select name="status" aria-label="Status for ${esc(opportunity?.title||'opportunity')}">${pipelineStatusOptions(item.status)}</select><input name="next_action" value="${esc(item.next_action||'')}" maxlength="500" placeholder="Next action" aria-label="Next action for ${esc(opportunity?.title||'opportunity')}"><button type="submit">Save</button></form>`;
+    }).join(''):'<p class="empty">Add an opportunity to start tracking it.</p>';
+    const unreadAlerts=alerts.filter(item=>item.status==='unread');
+    document.querySelector('#alert-count').textContent=`${unreadAlerts.length} unread · ${watches.length} watched · ${deliveries.filter(item=>item.status==='sent').length} emailed`;
+    document.querySelector('#notification-form').elements.enabled.checked=notificationPreference.enabled;
+    document.querySelector('#notification-form').elements.recipient_email.value=notificationPreference.recipient_email;
+    document.querySelector('#alert-list').innerHTML=alerts.length?alerts.map(item=>{
+      const opportunity=allOpportunities.find(candidate=>candidate.id===item.opportunity_id);
+      const changes=Object.values(item.changed_fields||{}).filter(value=>value&&typeof value==='object'&&('before' in value||'after' in value));
+      return `<article class="review-row"><span class="badge">${esc(item.status)} · ${esc(item.alert_type.replaceAll('_',' '))}</span><h3>${esc(item.title)}</h3><p>${esc(item.message)}</p>${changes.length?`<ul class="plain-list">${changes.map(change=>`<li><strong>${esc(change.label||'Field')}:</strong> ${esc(change.before??'Not provided')} → ${esc(change.after??'Not provided')}</li>`).join('')}</ul>`:''}<p class="summary-copy">${esc(opportunity?.title||'Opportunity unavailable')} · ${esc(new Date(item.created_at).toLocaleString())}</p><div class="actions">${item.status==='unread'?`<button type="button" data-alert-id="${esc(item.id)}" data-alert-status="read">Mark read</button>`:''}${item.status!=='resolved'?`<button type="button" class="secondary" data-alert-id="${esc(item.id)}" data-alert-status="resolved">Resolve</button>`:''}</div></article>`;
+    }).join(''):'<p class="empty">No alerts yet. Watch an opportunity to monitor deadlines and amendments.</p>';
+    document.querySelector('#review-list').innerHTML=reviews.map(review=>`<article class="review-row"><span class="badge">${esc(review.priority)} priority</span><h3>${esc(gateLabel(review.field_name))}</h3><p>${esc(review.extracted_value||'No value extracted')}</p><p class="subtle">${Math.round(finiteNumber(review.confidence)*100)}% confidence · ${esc(review.reason)}</p><p>“${esc(review.evidence?.[0]?.supporting_text||'No evidence excerpt')}”</p><div class="actions"><button type="button" data-review-action="resolve" data-review-id="${esc(review.id)}">Correct value</button><button type="button" class="secondary" data-review-action="dismiss" data-review-id="${esc(review.id)}">Dismiss</button></div></article>`).join('')||(authToken()?'<p class="empty">No pending reviews. Low-confidence fields will appear here.</p>':'<p class="empty">Sign in to view your organization’s review queue.</p>');
   }catch(error){
+    document.querySelector('#catalog').innerHTML=`<p class="empty">${esc(error instanceof Error?error.message:'Unable to load opportunities.')}</p>`;
     document.querySelector('#matches').innerHTML=`<p class="empty">${esc(error instanceof Error?error.message:'Unable to load dashboard data.')}</p>`;
   }
+}
+
+async function saveProfile(event){
+  event.preventDefault();
+  const form=event.currentTarget;
+  const button=document.querySelector('#profile-save');
+  const status=document.querySelector('#profile-status');
+  const numberOrNull=name=>form.elements[name].value===''?null:Number(form.elements[name].value);
+  const projectTitle=form.elements.project_title.value.trim();
+  const projectDescription=form.elements.project_description.value.trim();
+  const project=projectTitle&&projectDescription?{
+    title:projectTitle,
+    client:form.elements.project_client.value.trim()||null,
+    description:projectDescription,
+    service_categories:csv(form.elements.project_services.value),
+    state:form.elements.project_state.value.trim()||null,
+    contract_value:numberOrNull('project_value'),
+    start_date:form.elements.project_start.value||null,
+    end_date:form.elements.project_end.value||null,
+    reference_available:form.elements.project_reference.checked
+  }:null;
+  const existing=workspaceData.profile;
+  const payload={
+    id:existing?.id||crypto.randomUUID(),
+    organization_id:existing?.organization_id||crypto.randomUUID(),
+    name:form.elements.name.value.trim(),
+    service_categories:csv(form.elements.service_categories.value),
+    states:csv(form.elements.states.value),
+    maximum_distance_miles:numberOrNull('maximum_distance_miles'),
+    minimum_contract_value:numberOrNull('minimum_contract_value'),
+    maximum_contract_value:numberOrNull('maximum_contract_value'),
+    licenses:csv(form.elements.licenses.value),
+    certifications:csv(form.elements.certifications.value),
+    set_asides:csv(form.elements.set_asides.value),
+    naics_codes:csv(form.elements.naics_codes.value),
+    insurance_coverages:csv(form.elements.insurance_coverages.value),
+    contract_preferences:csv(form.elements.contract_preferences.value),
+    past_performance:project?[project,...(existing?.past_performance?.slice(1)||[])]:[],
+    capability_statement:form.elements.capability_statement.value.trim()
+  };
+  button.disabled=true;
+  status.textContent='Saving profile and recalculating opportunities…';
+  status.dataset.kind='';
+  try{
+    await authFetch('/api/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(json);
+    status.textContent='Profile saved. Rankings were recalculated.';
+    status.dataset.kind='success';
+    await load();
+  }catch(error){status.textContent=error instanceof Error?error.message:'Unable to save the company profile.';status.dataset.kind='error'}
+  finally{button.disabled=false}
 }
 
 async function decideReview(event){
@@ -108,6 +363,92 @@ async function decideReview(event){
   }catch(error){alert(error instanceof Error?error.message:'Unable to save the review decision.');button.disabled=false}
 }
 
+async function addToPipeline(event){
+  const button=event.target.closest('[data-pipeline-add]');
+  if(!button)return;
+  button.disabled=true;
+  try{
+    await authFetch('/api/pipeline/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({opportunity_id:button.dataset.pipelineAdd})}).then(json);
+    await load();
+    location.hash='pipeline';
+  }catch(error){alert(error instanceof Error?error.message:'Unable to add the opportunity to the pipeline.');button.disabled=false}
+}
+
+async function savePipelineItem(event){
+  const form=event.target.closest('[data-pipeline-item]');
+  if(!form)return;
+  event.preventDefault();
+  const button=form.querySelector('button[type="submit"]');
+  button.disabled=true;
+  try{
+    await authFetch(`/api/pipeline/items/${encodeURIComponent(form.dataset.pipelineItem)}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:form.elements.status.value,next_action:form.elements.next_action.value.trim()||null})}).then(json);
+    await load();
+  }catch(error){alert(error instanceof Error?error.message:'Unable to update the pipeline item.');button.disabled=false}
+}
+
+async function changeWatch(event){
+  const button=event.target.closest('[data-watch-action]');
+  if(!button)return;
+  button.disabled=true;
+  try{
+    const adding=button.dataset.watchAction==='add';
+    const response=await authFetch(`/api/watches/${encodeURIComponent(button.dataset.opportunityId)}`,{method:adding?'POST':'DELETE'});
+    if(!response.ok)throw new Error(`Request failed (${response.status})`);
+    await load();
+    if(adding)location.hash='alerts';
+  }catch(error){alert(error instanceof Error?error.message:'Unable to update monitoring.');button.disabled=false}
+}
+
+async function updateAlert(event){
+  const button=event.target.closest('[data-alert-id]');
+  if(!button)return;
+  button.disabled=true;
+  try{
+    await authFetch(`/api/alerts/${encodeURIComponent(button.dataset.alertId)}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:button.dataset.alertStatus})}).then(json);
+    await load();
+  }catch(error){alert(error instanceof Error?error.message:'Unable to update the alert.');button.disabled=false}
+}
+
+async function saveNotificationPreferences(event){
+  event.preventDefault();
+  const form=event.currentTarget;
+  const status=document.querySelector('#notification-status');
+  status.textContent='Saving…';
+  try{
+    await authFetch('/api/notification-preferences',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:form.elements.enabled.checked,recipient_email:form.elements.recipient_email.value.trim()})}).then(json);
+    status.textContent=form.elements.enabled.checked?'Email notifications enabled.':'Email notifications disabled.';
+    status.dataset.kind='success';
+  }catch(error){status.textContent=error instanceof Error?error.message:'Unable to save notifications.';status.dataset.kind='error'}
+}
+
+async function handleAttachments(event){
+  const row=event.target.closest('[data-opportunity-select]');
+  if(row){
+    selectedOpportunityId=row.dataset.opportunitySelect;
+    document.querySelectorAll('[data-opportunity-select]').forEach(item=>item.classList.toggle('selected',item===row));
+    renderOpportunityDetail(selectedOpportunityId);
+    return;
+  }
+  const button=event.target.closest('[data-attachment-action]');
+  if(!button)return;
+  const opportunityId=button.dataset.opportunityId;
+  const target=document.querySelector(`#attachments-${CSS.escape(opportunityId)}`);
+  button.disabled=true;
+  try{
+    if(button.dataset.attachmentAction==='list'){
+      const attachments=await authFetch(`/api/opportunities/${encodeURIComponent(opportunityId)}/attachments`).then(json);
+      target.innerHTML=attachments.map(attachment=>`<div class="gate"><span>${esc(attachment.filename)}</span><button type="button" data-attachment-action="analyze" data-opportunity-id="${esc(opportunityId)}" data-attachment-id="${esc(attachment.id)}">Analyze</button></div>`).join('')||'<span class="subtle">No public attachments were reported by SAM.gov.</span>';
+    }else{
+      target.textContent='Downloading and analyzing attachment…';
+      const result=await authFetch(`/api/opportunities/${encodeURIComponent(opportunityId)}/attachments/${encodeURIComponent(button.dataset.attachmentId)}/analyze`,{method:'POST'}).then(json);
+      target.textContent=result.duplicate?'This attachment was already analyzed for your organization.':`Attachment ${result.job?.status||'queued'} for analysis.`;
+      target.dataset.kind='success';
+      await load();
+    }
+  }catch(error){target.textContent=error instanceof Error?error.message:'Unable to analyze the attachment.';target.dataset.kind='error'}
+  finally{button.disabled=false}
+}
+
 async function signIn(event){
   event.preventDefault();
   const body=new URLSearchParams({username:document.querySelector('#auth-email').value,password:document.querySelector('#auth-password').value});
@@ -119,6 +460,23 @@ async function signIn(event){
 }
 
 function signOut(){localStorage.removeItem('contractfit-access-token');document.querySelector('#auth-status').textContent='Signed out.';document.querySelector('#auth-status').dataset.kind='';load()}
+
+function applyFilters(event){
+  event.preventDefault();
+  opportunityFilters={
+    q:document.querySelector('#filter-query').value.trim(),
+    source:document.querySelector('#filter-source').value,
+    deadline_status:document.querySelector('#filter-deadline').value,
+    has_set_aside:document.querySelector('#filter-set-aside').checked?'true':''
+  };
+  load();
+}
+
+function clearFilters(){
+  document.querySelector('#filter-form').reset();
+  opportunityFilters={};
+  load();
+}
 
 async function resetDemo(){
   const button=document.querySelector('#reset-demo');
@@ -135,7 +493,7 @@ function setUploadState(message,kind=''){
 const wait=milliseconds=>new Promise(resolve=>setTimeout(resolve,milliseconds));
 async function waitForJob(jobId,filename){
   for(let attempt=0;attempt<120;attempt+=1){
-    const job=await fetch(`/api/processing-jobs/${encodeURIComponent(jobId)}`).then(json);
+    const job=await authFetch(`/api/processing-jobs/${encodeURIComponent(jobId)}`).then(json);
     if(job.status==='completed')return job;
     if(job.status==='needs_review')return job;
     if(job.status==='failed')throw new Error(job.error_message||`${filename} processing failed.`);
@@ -207,17 +565,42 @@ function uploadDocument(event){
   function finishUpload(){
     input.disabled=false;
     button.disabled=false;
-    button.textContent='Upload and analyze';
+    button.textContent='Analyze document';
     progressWrap.classList.remove('visible');
     progressWrap.setAttribute('aria-hidden','true');
   }
 }
 
 document.querySelector('#reset-demo').addEventListener('click',resetDemo);
+document.querySelector('#profile-form').addEventListener('submit',saveProfile);
 document.querySelector('#upload-form').addEventListener('submit',uploadDocument);
 document.querySelector('#reviews').addEventListener('click',decideReview);
+document.querySelector('#catalog').addEventListener('click',handleAttachments);
+document.querySelector('#catalog').addEventListener('keydown',event=>{if(['Enter',' '].includes(event.key)&&event.target.matches('[data-opportunity-select]')){event.preventDefault();handleAttachments(event)}});
+document.querySelector('#matches').addEventListener('click',handleAttachments);
+document.querySelector('#matches').addEventListener('click',addToPipeline);
+document.querySelector('#matches').addEventListener('click',changeWatch);
+document.querySelector('#matches').addEventListener('click',openComplianceWorkspace);
+document.querySelector('#matches').addEventListener('submit',saveOpportunityFeedback);
+document.querySelector('#pipeline-list').addEventListener('submit',savePipelineItem);
+document.querySelector('#compliance-matrix').addEventListener('submit',saveComplianceItem);
+document.querySelector('#compliance-matrix').addEventListener('click',showDocumentPage);
+document.querySelector('#amendment-comparison').addEventListener('click',showDocumentPage);
+document.querySelector('#amendment-comparison').addEventListener('click',applySelectedAmendment);
+document.querySelector('#compare-amendments').addEventListener('click',compareAmendments);
+document.querySelector('#export-compliance').addEventListener('click',exportComplianceMatrix);
+document.querySelector('#close-compliance').addEventListener('click',()=>{document.querySelector('#compliance').classList.add('hidden');location.hash='opportunities'});
+document.querySelector('#alert-list').addEventListener('click',updateAlert);
+document.querySelector('#notification-form').addEventListener('submit',saveNotificationPreferences);
+document.querySelector('#filter-form').addEventListener('submit',applyFilters);
+document.querySelector('#clear-filters').addEventListener('click',clearFilters);
 document.querySelector('#auth-form').addEventListener('submit',signIn);
+document.querySelector('#demo-company').addEventListener('change',event=>{document.querySelector('#auth-email').value=event.target.value});
 document.querySelector('#sign-out').addEventListener('click',signOut);
+document.querySelectorAll('.nav a').forEach(link=>link.addEventListener('click',()=>{
+  document.querySelectorAll('.nav a').forEach(item=>item.removeAttribute('aria-current'));
+  link.setAttribute('aria-current','page');
+}));
 load();
 </script>
 </body>

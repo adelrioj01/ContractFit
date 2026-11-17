@@ -1,12 +1,33 @@
 """Persistence-agnostic domain models for human review of extracted fields."""
 
-from datetime import UTC, datetime
+import json
+import re
+from datetime import UTC, date, datetime
+from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
-from contractfit.domain import Evidence, Opportunity
+from contractfit.domain import Evidence, Opportunity, Requirement
+from contractfit.extraction import normalize_scalar_requirement
+
+_SCALAR_REVIEW_FIELDS = {
+    "deadline": "response_deadline",
+    "location": "place_of_performance",
+    "set_aside": "set_aside",
+    "value": "estimated_value",
+}
+_REVIEW_FIELD_CATEGORIES = {value: key for key, value in _SCALAR_REVIEW_FIELDS.items()}
+
+
+def _requirement_document_order(requirement: Requirement) -> tuple[int, int, str, str]:
+    evidence = requirement.evidence
+    page = evidence.page if evidence.page is not None else 2**31 - 1
+    section = evidence.section or ""
+    line_match = re.fullmatch(r"line (\d+)", section.casefold())
+    line = int(line_match.group(1)) if line_match else 2**31 - 1
+    return page, line, section, str(requirement.id)
 
 
 class ReviewStatus(StrEnum):
@@ -199,6 +220,82 @@ class ReviewItem(BaseModel):
         return type(self).model_validate(values)
 
 
+def resolve_conflicting_value(
+    item: ReviewItem,
+    opportunity: Opportunity,
+    *,
+    reviewer_id: UUID,
+    corrected_value: str,
+    note: str | None = None,
+) -> tuple[ReviewItem, Opportunity]:
+    """Validate and apply an evidence-backed scalar conflict resolution."""
+    if item.reason is not ReviewReason.CONFLICTING_VALUES:
+        raise ValueError("review is not a conflicting scalar value")
+    if item.opportunity_id != opportunity.id:
+        raise ValueError("review does not belong to the opportunity")
+    if opportunity.document_id is None:
+        raise ValueError("organization reviews cannot modify public opportunities")
+    prefix = "opportunity:"
+    if not item.field_name.startswith(prefix):
+        raise ValueError("review field is not an allowed opportunity scalar")
+    field_name = item.field_name.removeprefix(prefix)
+    category = _REVIEW_FIELD_CATEGORIES.get(field_name)
+    if category is None:
+        raise ValueError("review field is not an allowed opportunity scalar")
+
+    raw_value = corrected_value.strip()
+    if not raw_value:
+        raise ValueError("corrected value must not be blank")
+    parsed_value: date | Decimal | str
+    candidate_value: str
+    if category == "deadline":
+        try:
+            parsed_value = date.fromisoformat(raw_value)
+        except ValueError as exc:
+            raise ValueError("deadline correction must use YYYY-MM-DD") from exc
+        candidate_value = parsed_value.isoformat()
+    elif category == "value":
+        try:
+            parsed_value = Decimal(raw_value.removeprefix("$").replace(",", ""))
+        except InvalidOperation as exc:
+            raise ValueError("value correction must be a valid non-negative amount") from exc
+        if not parsed_value.is_finite() or parsed_value < 0:
+            raise ValueError("value correction must be a valid non-negative amount")
+        candidate_value = str(parsed_value)
+    else:
+        parsed_value = raw_value
+        candidate_value = raw_value
+
+    try:
+        snapshot = json.loads(item.extracted_value or "")
+    except json.JSONDecodeError as exc:
+        raise ValueError("conflict review candidate snapshot is invalid") from exc
+    if not isinstance(snapshot, list) or not all(isinstance(value, str) for value in snapshot):
+        raise ValueError("conflict review candidate snapshot is invalid")
+    normalized_candidate = normalize_scalar_requirement(category, candidate_value)
+    snapshot_candidates = {
+        normalize_scalar_requirement(category, value) for value in snapshot
+    }
+    if normalized_candidate not in snapshot_candidates:
+        raise ValueError("corrected value must select an evidence-backed candidate")
+    has_current_evidence = any(
+        requirement.evidence in item.evidence
+        for requirement in opportunity.requirements
+        if requirement.category == category
+        and normalize_scalar_requirement(category, requirement.description)
+        == normalized_candidate
+    )
+    if not has_current_evidence:
+        raise ValueError("conflict review is stale and must be regenerated")
+
+    resolved = item.resolve(
+        reviewer_id=reviewer_id,
+        corrected_value=candidate_value,
+        note=note,
+    )
+    return resolved, opportunity.model_copy(update={field_name: parsed_value})
+
+
 def review_sort_key(item: ReviewItem) -> tuple[int, float, datetime, str]:
     """Sort pending work by urgency, uncertainty, age, then stable identity."""
     return (-item.priority_score, item.confidence, item.created_at, str(item.id))
@@ -213,7 +310,35 @@ def build_requirement_reviews(
     """Create review candidates for uncertain extracted requirements."""
     if not 0 <= confidence_threshold <= 1:
         raise ValueError("confidence_threshold must be between zero and one")
-    return [
+    grouped_ids: set[UUID] = set()
+    reviews: list[ReviewItem] = []
+    for category, opportunity_field in _SCALAR_REVIEW_FIELDS.items():
+        requirements = sorted(
+            (item for item in opportunity.requirements if item.category == category),
+            key=_requirement_document_order,
+        )
+        normalized_values = {
+            normalize_scalar_requirement(category, item.description) for item in requirements
+        }
+        if len(normalized_values) <= 1 or getattr(opportunity, opportunity_field) is not None:
+            continue
+        grouped_ids.update(item.id for item in requirements)
+        reviews.append(
+            ReviewItem(
+                organization_id=organization_id,
+                opportunity_id=opportunity.id,
+                field_name=f"opportunity:{opportunity_field}",
+                extracted_value=json.dumps(
+                    [item.description for item in requirements], separators=(",", ":")
+                ),
+                confidence=min(item.confidence for item in requirements),
+                mandatory=any(item.mandatory for item in requirements),
+                reason=ReviewReason.CONFLICTING_VALUES,
+                evidence=[item.evidence for item in requirements],
+            )
+        )
+
+    reviews.extend(
         ReviewItem(
             organization_id=organization_id,
             opportunity_id=opportunity.id,
@@ -225,6 +350,7 @@ def build_requirement_reviews(
             evidence=[requirement.evidence],
         )
         for requirement in opportunity.requirements
-        if requirement.confidence < confidence_threshold
-    ]
+        if requirement.id not in grouped_ids and requirement.confidence < confidence_threshold
+    )
+    return reviews
 

@@ -1,168 +1,207 @@
 # ContractFit
 
-ContractFit helps facilities-service contractors find government opportunities they can realistically pursue. It extracts solicitation requirements with source evidence, applies deterministic eligibility checks, and ranks opportunities against a company's capabilities.
+[![CI](https://github.com/adelrioj01/ContractFit/actions/workflows/ci.yml/badge.svg)](https://github.com/adelrioj01/ContractFit/actions/workflows/ci.yml)
 
-## Initial vertical
+ContractFit is an AI-assisted workspace that helps facilities-service contractors find realistic
+government opportunities, trace solicitation requirements to source evidence, and manage the work
+needed for an informed bid/no-bid decision.
 
-The first release focuses on small and midsize contractors in:
+> Portfolio status: working vertical-slice MVP. The repository contains synthetic demonstration
+> data and reproducible regression evaluations; it does not claim production accuracy or replace
+> procurement or legal review.
 
-- Janitorial and custodial services
-- HVAC and building maintenance
-- Landscaping and groundskeeping
-- Pest control
-- Electrical and plumbing services
-- General facilities maintenance
+![ContractFit opportunity workspace](docs/screenshots/dashboard.png)
 
-This narrow starting point gives the matching system a coherent vocabulary and evaluation set. The architecture can later support additional contractor industries.
+## Why it exists
 
-## Product principles
+Government solicitations combine deadlines, certifications, set-asides, insurance limits,
+technical requirements, amendments, and attachments. Small contractors often evaluate that
+material manually and can miss a disqualifying condition or lose the evidence behind a decision.
+ContractFit keeps hard eligibility rules deterministic, uses models only where semantic judgment
+helps, preserves source citations, and routes uncertain results to a human reviewer.
 
-- **Evidence before answers:** every extracted requirement must point to its source document and location.
-- **Rules before guesses:** deadlines, certifications, geography, set-asides, and hard eligibility constraints use deterministic checks.
-- **AI where it adds value:** language models handle extraction, normalization, semantic matching, and explanations.
-- **Human review for high-impact decisions:** ContractFit supports bid/no-bid decisions; it does not make them autonomously.
-- **Evaluation from day one:** extraction accuracy, citation validity, ranking quality, latency, and cost are measured.
+## Product workflow
+
+1. A contractor signs in and records capabilities, territory, capacity, certifications, and past
+   performance.
+2. The team imports SAM.gov opportunities or uploads PDF, DOCX, and TXT solicitations.
+3. A durable worker parses files, invokes OCR when needed, and extracts evidence-linked
+   requirements.
+4. Deterministic gates evaluate deadlines, geography, set-asides, certifications, and capacity.
+5. Optional local Ollama scoring and embeddings add semantic ranking; lexical scoring remains the
+   reproducible fallback.
+6. Users review ranked opportunities, resolve uncertain fields, maintain a compliance matrix, and
+   compare amendments without allowing a model to make the final decision.
+
+## What is implemented
+
+| Capability | Status | Evidence |
+|---|---|---|
+| PDF, DOCX and TXT ingestion | Implemented | Hash-addressed storage, parsing and page records |
+| OCR for scanned PDF pages | Implemented | Local Tesseract path with review flags |
+| Requirement extraction with citations | Implemented | Deterministic extractor and labeled regression fixtures |
+| Hard eligibility rules | Implemented | Deadline, territory, set-aside, certification and capacity gates |
+| Semantic fit scoring | Experimental | Optional local Ollama scorer with safe lexical fallback |
+| Vector retrieval | Experimental | Ollama embeddings, hash cache and pgvector cosine search |
+| Human review and compliance workflow | Implemented | Organization-scoped reviews, evidence and amendment acknowledgements |
+| Relevance feedback | Implemented | Organization-scoped API, persistence, dashboard controls and PostgreSQL concurrency coverage |
+| SAM.gov synchronization | Implemented | Bounded ingestion, snapshots, deduplication and attachment analysis |
+| Runtime autonomous agent | Not implemented | Development agents do not make product decisions |
+| Hosted public demo | Not published | Local Docker workflow is documented below |
+
+For implementation-level traceability, see [Feature status](docs/feature-status.md).
 
 ## Architecture
 
-- FastAPI service in `backend/`
-- PostgreSQL with pgvector for structured data and semantic retrieval
-- Redis for caching and future background jobs
-- Next.js dashboard planned in `frontend/`
-- Docker Compose for a reproducible local environment
-- CI for linting, type checks, and tests
+ContractFit is a modular monolith with separate API, worker, SAM ingestion, notification, and
+persistence boundaries. PostgreSQL stores domain state, pgvector stores semantic embeddings, Redis
+backs durable processing, and optional Ollama services stay behind provider interfaces.
 
-See [architecture.md](docs/architecture.md) for the system design and [roadmap.md](docs/roadmap.md) for delivery milestones.
+```mermaid
+flowchart LR
+    U[Browser] --> API[FastAPI API]
+    API --> DB[(PostgreSQL + pgvector)]
+    API --> Q[(Redis queue)]
+    Q --> W[Document worker]
+    W --> FS[(Hash-addressed files)]
+    W --> OCR[Local OCR]
+    W --> DB
+    API --> O[Optional Ollama]
+    O --> API
+    API --> R[Human review]
+    S[SAM.gov] --> I[SAM ingester]
+    I --> DB
+```
+
+The model never overrides deterministic eligibility gates. If Ollama fails, matching falls back to
+lexical scoring and reports the method used. See [Architecture](docs/architecture.md), the
+[editable diagrams](docs/diagrams/README.md), and the [technical case study](docs/case-study.md).
+
+## Verified evaluation baseline
+
+The following local baseline was reproduced on 2026-11-04 with the repository's synthetic fixtures:
+
+| Evaluation | Cases | Result |
+|---|---:|---:|
+| Extraction and eligibility | 4 | Six recorded metrics at `1.0` |
+| Deterministic instruction-text corpus | 6 | Six recorded metrics at `1.0` |
+| Lexical semantic ranking | 30 | Top-1 `0.3667`, Recall@3 `0.4333`, MRR `0.5306` |
+
+These are regression results, not customer-data accuracy claims. The corpus is intentionally small,
+and latency excludes OCR, external APIs, Redis queue time, SMTP, and Ollama inference. Reproduce it:
+
+```bash
+cd backend
+uv run python -m contractfit.quality_cli --output quality-report.json
+uv run python -m contractfit.ranking_cli --provider lexical
+```
+
+See [Portfolio evaluation](docs/portfolio-evaluation.md) and the versioned
+[evaluation artifacts](docs/evaluations/README.md).
 
 ## Run locally
 
-Requirements: Docker Desktop and Docker Compose.
+### Docker path
+
+Requirements: Docker Desktop with Docker Compose.
 
 ```bash
 cp .env.example .env
 docker compose up --build
 ```
 
-Then verify the API:
+On PowerShell, use `Copy-Item .env.example .env` for the first command. Then open
+<http://localhost:8000> or check `curl http://localhost:8000/health`.
 
-```bash
-curl http://localhost:8000/health
-```
+The local-only reviewer account is:
 
-Expected response:
+- Email: `demo@contractfit.local`
+- Password: `contractfit-demo-password`
 
-```json
-{"status":"ok","environment":"development"}
-```
+Four additional synthetic organizations are available from the login panel. Production refuses to
+start with the default signing secret.
 
-## Backend development
+### Backend development
 
-With Python 3.12 and [uv](https://docs.astral.sh/uv/) installed:
+Requirements: Python 3.12 and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 cd backend
 uv sync --dev
-uv run pytest
 uv run ruff check .
 uv run mypy src
+uv run pytest
 ```
 
-## Current status
+Direct development uses the in-memory adapter and inline processing unless configured otherwise.
+Docker Compose uses PostgreSQL and separate workers.
 
-This repository now contains a working vertical-slice MVP:
+### Optional local AI
 
-- A realistic facilities-contractor profile and editable profile API
-- PDF, DOCX and TXT solicitation upload with secure hash-addressed storage and deduplication
-- Page-oriented parsing with evidence-preserving requirement extraction and OCR flags
-- Durable Redis-backed processing jobs with retries and a separate worker
-- Local Tesseract OCR for scanned PDF pages
-- Deterministic deadline, territory, set-aside, certification, and capacity gates
-- Hybrid fit scoring with an optional local Ollama model and an offline fallback
-- Cached Ollama embeddings with pgvector cosine search and lexical fallback
-- An explainable ranked-opportunity dashboard at `http://localhost:8000`
-- Organization accounts, Argon2 password hashing, signed access tokens and authenticated reviews
-- A labeled evaluation set measuring extraction recall, citation validity, and eligibility accuracy
-
-Useful API routes:
-
-- `POST /api/auth/register`
-- `POST /api/auth/token`
-- `GET /api/auth/me`
-- `GET /api/profile`
-- `PUT /api/profile`
-- `POST /api/documents/upload`
-- `GET /api/documents`
-- `GET /api/documents/{document_id}/pages`
-- `GET /api/processing-jobs`
-- `GET /api/processing-jobs/{job_id}`
-- `POST /api/processing-jobs/{job_id}/retry`
-- `POST /api/opportunities/import-text`
-- `GET /api/opportunities`
-- `GET /api/matches`
-- `GET /api/evaluation`
-- `GET /api/evaluation/ranking`
-- `POST /api/demo/reset`
-
-Customer routes require a bearer token. Profiles, uploaded documents, document pages, processing
-jobs, uploaded opportunities, matches, evaluations, and reviews are resolved from the organization
-in that token; client-supplied ownership identifiers are not trusted. Public SAM.gov catalog records
-have no customer document owner and remain shared. Opportunities linked to an uploaded document are
-private, and review evidence may reference only documents owned by the authenticated organization.
-
-The seeded local reviewer account is `demo@contractfit.local` with password
-`contractfit-demo-password`. It is for local development only. Production refuses to start with
-the default signing secret; set a private `AUTH_SECRET_KEY` of at least 32 characters.
-
-The default `AI_PROVIDER=offline` makes development deterministic. To exercise local-model
-scoring, run Ollama, download the configured model, and set `AI_PROVIDER=ollama` in `.env`.
-The matching service falls back safely if the local model is unavailable.
-
-Vector retrieval is independently controlled by `EMBEDDING_PROVIDER`. To enable local embeddings:
+The defaults are deterministic: `AI_PROVIDER=offline` and `EMBEDDING_PROVIDER=offline`. To exercise
+local model-backed behavior, run Ollama and configure the corresponding values in `.env`:
 
 ```bash
+ollama pull qwen2.5:7b
 ollama pull nomic-embed-text
 ```
 
-Then set `EMBEDDING_PROVIDER=ollama` in `.env`. ContractFit embeds the contractor capability
-statement and opportunity scopes, caches 768-dimensional vectors in PostgreSQL/pgvector, and
-uses cosine similarity as the semantic portion of the fit score. Text hashes prevent unchanged
-content from being embedded again. If Ollama is unavailable, matching falls back to the existing
-scorer and the deterministic eligibility gates still run.
+Model-backed results count as measured only when the relevant command completes successfully and
+records the model and configuration used.
 
-`GET /api/evaluation/ranking` evaluates 30 hand-authored synthetic semantic-retrieval cases. It always reports
-the reproducible lexical baseline and, when Ollama embeddings are enabled, reports the embedding
-model's Top-1 accuracy, Recall@3, mean reciprocal rank (MRR), and MRR improvement. The initial
-lexical baseline is Top-1 `0.3667`, Recall@3 `0.4333`, and MRR `0.5306`; these are regression
-baselines, not claims about production accuracy.
+## Verify the portfolio build
 
-Run the same evaluation from the command line and optionally save the JSON report:
+From PowerShell at the repository root:
 
-```bash
-cd backend
-uv run python -m contractfit.ranking_cli --provider lexical
-uv run python -m contractfit.ranking_cli --provider ollama --output ranking-report.json
+```powershell
+./scripts/verify.ps1
 ```
 
-The Ollama command requires the configured embedding model to be installed and running. A report
-is only considered a measured model result when that command completes successfully.
+The script runs linting, strict type checking, the full backend test suite, the portfolio quality
+gate, documentation-link checks, and a tracked-file secret-pattern scan. PostgreSQL integration
+checks remain part of CI because they require a migrated test database.
 
-Docker Compose runs document parsing, OCR and extraction in the `worker` service. Direct backend
-development defaults to `PROCESSING_MODE=inline`, keeping tests and one-process demos simple.
+## Security and data boundaries
 
-## Persistence
+Customer-owned profiles, documents, jobs, opportunities, evidence, reviews, and compliance state
+are resolved from the authenticated organization. Client-supplied ownership identifiers are not
+trusted. Public SAM.gov catalog records remain shared, while analyzed attachments become private
+organization-owned documents.
 
-Docker Compose runs the API with `STORAGE_BACKEND=postgres`. On startup, the container applies
-Alembic migrations and then launches FastAPI. Direct `uv run` development defaults to the
-in-memory adapter unless `STORAGE_BACKEND=postgres` is configured.
+Do not upload customer or confidential documents to the public demo dataset. Read
+[SECURITY.md](SECURITY.md) for reporting and threat-boundary information.
 
-Create a future migration after changing SQLAlchemy records:
+## Honest limitations
 
-```bash
-cd backend
-uv run alembic revision --autogenerate -m "describe the schema change"
-uv run alembic upgrade head
-```
+- Bundled evaluation data are synthetic and too small for a production-accuracy claim.
+- Request logs expose trace IDs, status and local duration; centralized metrics and alerting still
+  depend on the eventual hosting platform.
+- The current extractor is deterministic; the instruction-text suite is not an LLM prompt-injection
+  evaluation.
+- Ollama scoring and embeddings are optional and have not been benchmarked across providers here.
+- Excel solicitation parsing and password recovery/verification are not implemented.
+- The browser UI is a dependency-light MVP served by FastAPI; the planned standalone frontend has
+  not been built.
+- Agent orchestration supports repository development only. ContractFit is not currently a runtime
+  multi-agent product.
+- ContractFit supports human decisions; it is not legal, procurement, or compliance advice.
+
+## Documentation
+
+- [Architecture](docs/architecture.md)
+- [Feature status](docs/feature-status.md)
+- [Technical case study](docs/case-study.md)
+- [Portfolio evaluation](docs/portfolio-evaluation.md)
+- [Development-agent workflow](docs/agent-workflow.md)
+- [Roadmap](docs/roadmap.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security](SECURITY.md)
+- [Changelog](CHANGELOG.md)
 
 ## License
 
-MIT
+[MIT](LICENSE)
+
+## Minimal Render deployment
+
+Prepared configuration and approval-gated runbook: [Render deployment](docs/render-deployment.md).

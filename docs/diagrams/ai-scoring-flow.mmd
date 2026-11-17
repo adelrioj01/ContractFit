@@ -1,0 +1,16 @@
+flowchart TD
+    R[Match request] --> G[Deterministic eligibility gates]
+    G -->|ineligible| X[Explain hard-gate result]
+    G -->|eligible or reviewable| P{Configured semantic provider}
+    P -->|offline| L[Lexical scorer]
+    P -->|Ollama| O[Local LLM scorer]
+    O -->|success| S[Semantic score and reason]
+    O -->|timeout, error, invalid output| L
+    L --> S
+    S --> E{Embedding provider enabled?}
+    E -->|yes| V[Cached pgvector similarity]
+    E -->|no or unavailable| C[Existing semantic score]
+    V --> F[Weighted explainable result]
+    C --> F
+    X --> F
+    F --> H[Human decision]

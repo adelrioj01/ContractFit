@@ -1,9 +1,10 @@
 name: CI
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, codex/sam-sync-v1]
 
 jobs:
   backend:
@@ -34,7 +35,12 @@ jobs:
       - run: uv sync --dev
       - run: uv run ruff check .
       - run: uv run mypy src
-      - run: uv run pytest
+      - name: Verify Render demo configuration offline
+        run: |
+          curl -fsSL --max-time 30 https://render.com/schema/render.yaml.json -o "$RUNNER_TEMP/render-schema.json"
+          uv run --with PyYAML==6.0.3 --with jsonschema==4.25.1 python ../scripts/check_render.py --schema "$RUNNER_TEMP/render-schema.json"
+      - run: uv run pytest -o faulthandler_timeout=60
+        timeout-minutes: 10
       - name: Verify PostgreSQL migrations
         env:
           DATABASE_URL: postgresql+psycopg://contractfit:contractfit@localhost:5432/contractfit_test
@@ -45,3 +51,30 @@ jobs:
         env:
           DATABASE_URL: postgresql+psycopg://contractfit:contractfit@localhost:5432/contractfit_test
         run: uv run pytest tests/test_pgvector_store.py
+      - name: Verify concurrent PostgreSQL amendment acknowledgement
+        env:
+          DATABASE_URL: postgresql+psycopg://contractfit:contractfit@localhost:5432/contractfit_test
+          CONTRACTFIT_ALLOW_TEST_DB_RESET: "1"
+        run: uv run pytest tests/test_amendment_postgres.py
+      - name: Verify concurrent PostgreSQL feedback first write
+        env:
+          DATABASE_URL: postgresql+psycopg://contractfit:contractfit@localhost:5432/contractfit_test
+          CONTRACTFIT_ALLOW_TEST_DB_RESET: "1"
+        run: uv run pytest tests/test_feedback_postgres.py
+      - name: Enforce portfolio quality and latency budgets
+        run: uv run python -m contractfit.quality_cli --output quality-report.json
+      - name: Upload portfolio quality report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contractfit-quality-report
+          path: backend/quality-report.json
+          if-no-files-found: warn
+
+  render-container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and verify isolated synthetic Render container
+        run: python scripts/smoke_render.py

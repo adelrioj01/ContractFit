@@ -1,0 +1,42 @@
+# Isolated synthetic smoke environment. Run through smoke_render.py, not the main Compose stack.
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: render_smoke
+      POSTGRES_USER: smoke
+      POSTGRES_PASSWORD: synthetic-smoke-only
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U smoke -d render_smoke]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    mem_limit: 256m
+    volumes:
+      - database:/var/lib/postgresql/data
+  api:
+    build: ../backend
+    environment:
+      DATABASE_URL: postgres://smoke:synthetic-smoke-only@db:5432/render_smoke
+      AUTH_SECRET_KEY: synthetic-container-smoke-signing-key-only
+      APP_ENV: production
+      STORAGE_BACKEND: postgres
+      PROCESSING_MODE: inline
+      SEED_DEMO_DATA: "true"
+      UPLOAD_DIRECTORY: /app/data/uploads
+      UPLOAD_MAX_BYTES: "5242880"
+      AI_PROVIDER: offline
+      EMBEDDING_PROVIDER: disabled
+      OCR_BACKEND: disabled
+      SAM_SYNC_ENABLED: "false"
+      NOTIFICATION_SEND_ENABLED: "false"
+      PORT: "10000"
+    depends_on:
+      db:
+        condition: service_healthy
+    mem_limit: 512m
+    volumes:
+      - uploads:/app/data
+volumes:
+  database:
+  uploads:

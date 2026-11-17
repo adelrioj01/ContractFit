@@ -10,6 +10,8 @@ from contractfit.api import (
     configure_processing,
     configure_store,
     list_document_pages,
+    list_matches,
+    list_reviews,
     upload_document,
 )
 from contractfit.auth import (
@@ -21,6 +23,8 @@ from contractfit.auth import (
 )
 from contractfit.config import get_settings
 from contractfit.job_queue import InMemoryJobQueue
+from contractfit.runtime import build_document_processor
+from contractfit.sample_data import SAMPLE_PROFILE
 from contractfit.store import InMemoryStore
 
 
@@ -135,6 +139,64 @@ def test_redis_mode_queues_document_without_processing_request(tmp_path: Path) -
         assert response.job is not None
         assert response.job.status == "queued"
         assert queue.dequeue() == response.job.id
+    finally:
+        settings.upload_directory = previous_directory
+        settings.processing_mode = previous_mode
+
+
+def test_conflicting_upload_flows_to_review_and_match_without_false_citation(
+    tmp_path: Path,
+) -> None:
+    settings = get_settings()
+    previous_directory = settings.upload_directory
+    previous_mode = settings.processing_mode
+    settings.upload_directory = str(tmp_path)
+    settings.processing_mode = "inline"
+    store = InMemoryStore()
+    configure_store(store)
+    identity = make_identity()
+    store.save_profile(
+        SAMPLE_PROFILE.model_copy(
+            update={"organization_id": identity.organization.id}
+        )
+    )
+    configure_processing(
+        InMemoryJobQueue(), build_document_processor(settings, store)
+    )
+    content = b"\n".join(
+        [
+            b"Title: Conflicting HVAC Deadline",
+            b"Response deadline: 2099-02-15",
+            b"Due date: 2099-03-01",
+            b"Place of performance: Dallas, Texas",
+            b"Set-aside: Small Business",
+            b"Required certification: EPA 608",
+            b"Estimated value: $200,000",
+            b"Scope: Commercial HVAC preventive maintenance",
+        ]
+    )
+
+    try:
+        response = upload_document(
+            make_upload("conflicting.txt", content, "text/plain"), identity
+        )
+        assert response.opportunity is not None
+        assert response.opportunity.response_deadline is None
+
+        deadline_gate = next(
+            gate
+            for match in list_matches(identity)
+            for gate in match.gates
+            if gate.name == "deadline"
+        )
+        assert deadline_gate.status == "needs_review"
+        assert deadline_gate.evidence is None
+
+        reviews = list_reviews(identity, review_status=None)
+        assert len(reviews) == 1
+        assert reviews[0].field_name == "opportunity:response_deadline"
+        assert reviews[0].reason == "conflicting_values"
+        assert [evidence.page for evidence in reviews[0].evidence] == [1, 1]
     finally:
         settings.upload_directory = previous_directory
         settings.processing_mode = previous_mode

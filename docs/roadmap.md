@@ -1,5 +1,20 @@
 # Roadmap
 
+Current reconciliation and file-ownership notes are recorded in
+[`docs/handoffs/2026-11-05-phase-1-reconciliation.md`](handoffs/2026-11-05-phase-1-reconciliation.md).
+
+## Portfolio presentation foundation
+
+- [x] Give ContractFit an independent repository identity and outcome-focused README.
+- [x] Separate implemented, experimental, planned, and out-of-scope capabilities.
+- [x] Publish editable architecture and AI decision-flow diagrams.
+- [x] Publish an evidence-backed technical case study and development-agent workflow.
+- [x] Version deterministic evaluation baselines and expose one verification command.
+- [x] Add contribution, security, changelog, and clean-onboarding guidance.
+- [ ] Record and publish a three-to-five-minute product demo (intentionally deferred).
+- [ ] Capture committed product screenshots after a Docker-backed visual review.
+- [ ] Publish a hosted environment with operational telemetry.
+
 ## Implemented MVP vertical slice
 - [x] Sample facilities-contractor profile.
 - [x] Saved solicitation text ingestion.
@@ -9,9 +24,9 @@
 - [x] Ranked opportunity dashboard and JSON API.
 - [x] Three-case labeled evaluation harness and CI coverage.
 
-The current hardening target is authenticated organization boundaries plus a scheduled SAM.gov
-ingestion workflow. Persistence, manual document ingestion, background processing, OCR, and the
-human-review queue are implemented end to end. The ingestion path has passed a Docker smoke test
+The current hardening target is production-ready catalog and document ingestion. Persistence,
+scheduled SAM.gov synchronization, manual document ingestion, background processing, OCR, and the
+human-review queue are implemented end to end. The document path has passed a Docker smoke test
 with both plain text and image-only PDF inputs.
 
 ## Implemented persistence foundation
@@ -24,6 +39,7 @@ with both plain text and image-only PDF inputs.
 ## Phase 0: validation
 - Interview 15 facilities-service contractors.
 - Collect five sanitized company profiles.
+- [x] Create five isolated synthetic company profiles for multi-tenant product testing.
 - Manually deliver ranked opportunity reports.
 - Obtain at least two paid-pilot commitments.
 
@@ -39,16 +55,17 @@ with both plain text and image-only PDF inputs.
 - Migrations, logging, tests and CI.
 
 ## Phase 2: company profiles
-- Services, territory, capacity, licenses, insurance and certifications.
-- Past-performance projects and contract preferences.
-- Editable structured onboarding.
+- [x] Services, territory, capacity, licenses, insurance and certifications.
+- [x] Past-performance projects and contract preferences.
+- [x] Editable structured onboarding with completeness reporting.
 
 ## Phase 3: ingestion
 - [x] Manual PDF, DOCX and TXT opportunity upload.
 - [x] Testable SAM.gov search client with normalized records, pagination and sanitized errors.
-- Persisted SAM.gov import workflow with scheduling, deduplication and amendment detection.
+- [x] Persisted SAM.gov import workflow with scheduling, deduplication and amendment detection.
 - [x] Secure attachment storage, SHA-256 hashing and deduplication.
-- Amendment snapshots and version history.
+- [x] Normalized amendment snapshots and version history.
+- [x] Fetch and version SAM.gov solicitation attachments by source snapshot.
 - [x] Durable, retryable Redis-backed background processing.
 
 ## Phase 4: document intelligence
@@ -59,7 +76,7 @@ with both plain text and image-only PDF inputs.
 - [x] Evidence-linked human-review domain model with deterministic priority and audited decisions.
 - [x] Organization-scoped persisted review queue and resolution API.
 - [x] Basic reviewer dashboard for correcting or dismissing low-confidence fields.
-- Replace the dashboard's local reviewer identity with authenticated user identity.
+- [x] Replace the dashboard's local reviewer identity with authenticated user identity.
 
 ## Phase 5: matching
 - [x] Deterministic hard gates.
@@ -67,20 +84,34 @@ with both plain text and image-only PDF inputs.
 - [x] Cached local embeddings and pgvector cosine retrieval for capabilities and scopes.
 - [x] Thirty-case semantic ranking baseline with Top-1, Recall@3 and MRR metrics.
 - [x] Reproducible CLI runner for lexical and local Ollama embedding evaluation.
+- [x] Deterministic evidence-aware past-performance matching.
 - Semantic past-performance matching and expansion to at least 100 labeled ranking cases.
 - [x] Evidence-grounded explanations.
 
 ## Phase 6: product workflow
-- Ranked opportunity dashboard.
-- Opportunity details and document viewer.
-- Watched opportunities, deadlines and amendments.
-- User relevance feedback.
+- [x] Ranked opportunity dashboard.
+- [x] Opportunity details with page-level source navigation.
+- [x] Organization-owned opportunity pipeline with status, owner and next action.
+- [x] Organization-owned editable compliance matrix with source citations, status, priority,
+  responsible user, due date and explicit business evidence.
+- [x] Read-only deterministic amendment comparison across SAM.gov snapshots and analyzed
+  organization attachments, with both source citations preserved.
+- [x] Persisted amendment acknowledgements and selective compliance-matrix updates.
+- [x] Organization-scoped compliance CSV export with source citations and business evidence.
+- [x] Watched opportunities, deadline reminders and amendment change alerts.
+- [x] Organization email preferences, auditable outbox and optional SMTP worker.
+- [x] Organization-owned relevance feedback with dashboard controls and PostgreSQL persistence.
 
 ## Phase 7: evaluation and hardening
 - At least 100 labeled opportunities.
-- Extraction, citation, eligibility and ranking metrics.
-- Tenant-isolation and prompt-injection tests.
-- Cost and latency budgets.
+- [x] Reproducible extraction, exact-value, citation, eligibility, gate and ranking metrics.
+- [x] Versioned tenant-isolation and deterministic instruction-text regression tests.
+- LLM prompt-injection, role-boundary, encoding and exfiltration tests when a model enters the
+  document-extraction path.
+- [x] Deterministic local latency budgets and a machine-readable CI quality report.
+- [x] PostgreSQL concurrency regression for amendment acknowledgement idempotency.
+- [x] PostgreSQL concurrency regression for organization-owned feedback first writes.
+- OCR, network, queue and optional local-model latency and resource budgets.
 
 ## Phase 8: paid pilot
 - Five pilot organizations.

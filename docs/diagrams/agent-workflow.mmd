@@ -1,0 +1,9 @@
+flowchart LR
+    H[Human owner] --> C[Codex orchestrator]
+    C -->|bounded brief| W[Local OpenCode/Qwen worker]
+    C -->|read-only diff| R[Independent reviewer]
+    W -->|commit + evidence| C
+    R -->|findings| C
+    C --> T[Deterministic tests and evaluations]
+    T --> C
+    C --> I[Final integration and handoff]

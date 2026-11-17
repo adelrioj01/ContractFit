@@ -1,5 +1,9 @@
 # Architecture
 
+Editable Mermaid sources are stored in [`docs/diagrams/`](diagrams/README.md). The diagrams show
+implemented boundaries only; planned hosted infrastructure and runtime agents are intentionally
+excluded.
+
 ## Implemented vertical slice
 
 `Upload -> LocalFileStorage -> DocumentParser -> SourceDocument/DocumentPage -> RequirementExtractor -> Opportunity -> OpportunityMatcher -> MatchResult`
@@ -18,9 +22,17 @@ Durable `ProcessingJob` records and a Redis queue move parsing, OCR and extracti
 process; a separate worker retries failures and recovers unfinished jobs after restart.
 
 The external-ingestion boundary includes a typed SAM.gov client that normalizes the provider's
-payload before it reaches product logic. The human-review boundary models field-level decisions
-with organization ownership, source evidence, deterministic priority and auditable terminal
-transitions. Their persistence and HTTP workflows are the next integration step.
+payload before it reaches product logic. A separate scheduler persists bounded ingestion runs,
+paginates the source, deduplicates opportunities by provider identity, and records immutable
+content-hashed snapshots only when provider data changes. Failed runs retain sanitized audit data
+and can be retried safely. The human-review boundary models field-level decisions with organization
+ownership, source evidence, deterministic priority and auditable terminal transitions.
+
+The compliance-workspace boundary deterministically projects extracted requirements into
+organization-owned editable rows only after a pursue decision. Source citations are copied for
+audit stability and cannot be changed through the workspace API. Coverage state, assignment,
+deadlines, notes, and user-supplied company evidence remain private workflow data; no model decides
+whether a requirement is covered.
 
 ## Persistence boundary
 
@@ -29,7 +41,8 @@ experiments fast; `SqlAlchemyStore` is the production adapter. SQLAlchemy record
 separate from Pydantic domain models so database concerns cannot leak into extraction or matching.
 Alembic is the only supported mechanism for changing the PostgreSQL schema.
 
-ContractFit begins as a modular monolith. It can later split ingestion and document processing into independent workers without changing the domain contracts.
+ContractFit begins as a modular monolith. SAM ingestion and document processing already execute as
+independent processes over shared persistence without changing the domain contracts.
 
 ## Data flow
 
@@ -64,6 +77,9 @@ Dashboard, alerts and feedback
 - Matching: hard gates, weighted scores, semantic similarity and explanations.
 - Evaluations: labeled datasets, regression metrics, cost and latency reporting.
 - Web: onboarding, opportunity review, evidence inspection and feedback.
+- Compliance: private coverage decisions, ownership, deadlines and immutable source traceability.
+- Amendments: read-only deterministic comparison across immutable provider snapshots and
+  organization-owned analyzed attachments.
 
 ## Invariants
 
@@ -73,3 +89,4 @@ Dashboard, alerts and feedback
 4. Customer data is isolated by organization.
 5. Model prompts and versions are traceable.
 6. Jobs are idempotent and retryable.
+7. Amendment comparison never mutates compliance decisions automatically.

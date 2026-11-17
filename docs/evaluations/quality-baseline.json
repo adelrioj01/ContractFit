@@ -1,0 +1,36 @@
+{
+  "observed_date": "2026-11-04",
+  "dataset": "bundled-synthetic-regression-fixtures",
+  "passed": true,
+  "extraction": {
+    "cases": 4,
+    "extraction_recall": 1.0,
+    "citation_validity": 1.0,
+    "eligibility_accuracy": 1.0,
+    "structured_value_accuracy": 1.0,
+    "gate_accuracy": 1.0,
+    "gate_citation_alignment": 1.0
+  },
+  "instruction_text": {
+    "cases": 6,
+    "extraction_recall": 1.0,
+    "citation_validity": 1.0,
+    "eligibility_accuracy": 1.0,
+    "structured_value_accuracy": 1.0,
+    "gate_accuracy": 1.0,
+    "gate_citation_alignment": 1.0
+  },
+  "ranking": {
+    "scorer": "lexical-fallback",
+    "cases": 30,
+    "top_1_accuracy": 0.3667,
+    "recall_at_3": 0.4333,
+    "mean_reciprocal_rank": 0.5306
+  },
+  "limitations": [
+    "All bundled cases are synthetic and are regression tests, not production accuracy claims.",
+    "Instruction-like text cases exercise only deterministic extraction, not LLM prompt security.",
+    "Wall-clock budgets cover deterministic local evaluation, not OCR, network, or Ollama latency.",
+    "The ranking corpus contains 30 labeled cases; the roadmap target remains 100."
+  ]
+}
