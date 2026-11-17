@@ -1,5 +1,9 @@
 # Architecture
 
+Editable Mermaid sources are stored in [`docs/diagrams/`](diagrams/README.md). The diagrams show
+implemented boundaries only; planned hosted infrastructure and runtime agents are intentionally
+excluded.
+
 ## Implemented vertical slice
 
 `Upload -> LocalFileStorage -> DocumentParser -> SourceDocument/DocumentPage -> RequirementExtractor -> Opportunity -> OpportunityMatcher -> MatchResult`

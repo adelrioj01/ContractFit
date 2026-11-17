@@ -1,5 +1,20 @@
 # Roadmap
 
+Current reconciliation and file-ownership notes are recorded in
+[`docs/handoffs/2026-11-05-phase-1-reconciliation.md`](handoffs/2026-11-05-phase-1-reconciliation.md).
+
+## Portfolio presentation foundation
+
+- [x] Give ContractFit an independent repository identity and outcome-focused README.
+- [x] Separate implemented, experimental, planned, and out-of-scope capabilities.
+- [x] Publish editable architecture and AI decision-flow diagrams.
+- [x] Publish an evidence-backed technical case study and development-agent workflow.
+- [x] Version deterministic evaluation baselines and expose one verification command.
+- [x] Add contribution, security, changelog, and clean-onboarding guidance.
+- [ ] Record and publish a three-to-five-minute product demo (intentionally deferred).
+- [ ] Capture committed product screenshots after a Docker-backed visual review.
+- [ ] Publish a hosted environment with operational telemetry.
+
 ## Implemented MVP vertical slice
 - [x] Sample facilities-contractor profile.
 - [x] Saved solicitation text ingestion.
@@ -85,13 +100,18 @@ with both plain text and image-only PDF inputs.
 - [x] Organization-scoped compliance CSV export with source citations and business evidence.
 - [x] Watched opportunities, deadline reminders and amendment change alerts.
 - [x] Organization email preferences, auditable outbox and optional SMTP worker.
-- User relevance feedback.
+- [x] Organization-owned relevance feedback with dashboard controls and PostgreSQL persistence.
 
 ## Phase 7: evaluation and hardening
 - At least 100 labeled opportunities.
-- Extraction, citation, eligibility and ranking metrics.
-- Tenant-isolation and prompt-injection tests.
-- Cost and latency budgets.
+- [x] Reproducible extraction, exact-value, citation, eligibility, gate and ranking metrics.
+- [x] Versioned tenant-isolation and deterministic instruction-text regression tests.
+- LLM prompt-injection, role-boundary, encoding and exfiltration tests when a model enters the
+  document-extraction path.
+- [x] Deterministic local latency budgets and a machine-readable CI quality report.
+- [x] PostgreSQL concurrency regression for amendment acknowledgement idempotency.
+- [x] PostgreSQL concurrency regression for organization-owned feedback first writes.
+- OCR, network, queue and optional local-model latency and resource budgets.
 
 ## Phase 8: paid pilot
 - Five pilot organizations.

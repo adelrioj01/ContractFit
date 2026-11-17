@@ -14,6 +14,8 @@ ContractFit helps facilities-service contractors identify government opportuniti
 
 ## Work rules
 - Work only in the directories assigned by the issue.
+- Follow the path ownership and integration rules in `docs/ownership.md` when assigning concurrent
+  frontend, backend, or integration work.
 - Do not commit secrets, customer documents, private capability statements, or production traces.
 - Keep pull requests small and independently testable.
 - Do not change shared schemas without an architecture decision.
