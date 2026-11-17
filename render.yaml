@@ -1,0 +1,56 @@
+# Preparation only: creating this Blueprint incurs charges. Obtain approval first.
+services:
+  - type: web
+    name: contractfit-demo
+    runtime: docker
+    plan: 0.5c-512mb
+    region: ohio
+    branch: codex/sam-sync-v1
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    autoDeployTrigger: "off"
+    numInstances: 1
+    healthCheckPath: /health
+    disk:
+      name: uploads
+      mountPath: /app/data
+      sizeGB: 1
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: contractfit-demo-db
+          property: connectionString
+      - key: AUTH_SECRET_KEY
+        generateValue: true
+      - key: APP_ENV
+        value: production
+      - key: STORAGE_BACKEND
+        value: postgres
+      - key: PROCESSING_MODE
+        value: inline
+      - key: SEED_DEMO_DATA
+        value: "true"
+      - key: UPLOAD_DIRECTORY
+        value: /app/data/uploads
+      - key: UPLOAD_MAX_BYTES
+        value: "5242880"
+      - key: AI_PROVIDER
+        value: offline
+      - key: EMBEDDING_PROVIDER
+        value: disabled
+      - key: OCR_BACKEND
+        value: disabled
+      - key: SAM_SYNC_ENABLED
+        value: "false"
+      - key: NOTIFICATION_SEND_ENABLED
+        value: "false"
+databases:
+  - name: contractfit-demo-db
+    plan: 0.1c-256mb
+    region: ohio
+    postgresMajorVersion: "17"
+    databaseName: contractfit
+    user: contractfit
+    diskSizeGB: 1
+    storageAutoscalingEnabled: false
+    ipAllowList: []

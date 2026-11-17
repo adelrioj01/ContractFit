@@ -201,3 +201,7 @@ Do not upload customer or confidential documents to the public demo dataset. Rea
 ## License
 
 [MIT](LICENSE)
+
+## Minimal Render deployment
+
+Prepared configuration and approval-gated runbook: [Render deployment](docs/render-deployment.md).

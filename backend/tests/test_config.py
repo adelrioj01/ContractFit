@@ -39,3 +39,32 @@ def test_scheduled_sam_sync_accepts_api_key() -> None:
 
     assert settings.sam_sync_enabled is True
     assert settings.sam_page_size == 250
+
+
+@pytest.mark.parametrize("scheme", ["postgres", "postgresql", "postgresql+psycopg"])
+def test_hosted_postgres_url_uses_installed_driver(scheme: str) -> None:
+    suffix = "user:p%25word@db.internal/demo?sslmode=require"
+    settings = Settings(database_url=f"{scheme}://{suffix}", _env_file=None)
+    assert settings.database_url == f"postgresql+psycopg://{suffix}"
+
+
+def test_sqlite_url_is_preserved() -> None:
+    assert Settings(database_url="sqlite://", _env_file=None).database_url == "sqlite://"
+
+
+def test_alembic_accepts_url_encoded_password_offline(monkeypatch: pytest.MonkeyPatch) -> None:
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    monkeypatch.setenv("DATABASE_URL", "postgres://demo:p%25word@localhost/demo")
+    result = subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head", "--sql"],
+        cwd=Path(__file__).resolve().parents[1],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "CREATE EXTENSION IF NOT EXISTS vector" in result.stdout
+    assert "20261106_0018" in result.stdout

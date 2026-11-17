@@ -4,3 +4,9 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 tests/
+
+.env
+.env.*
+data/
+*.log
+quality-report.json
