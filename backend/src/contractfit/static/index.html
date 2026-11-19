@@ -9,6 +9,27 @@
     textarea{font:inherit;width:100%;min-height:88px;padding:9px 10px;border:1px solid #bfc4c0;border-radius:6px;background:white;color:var(--ink);resize:vertical}.onboarding-card{margin-bottom:20px}.onboarding-progress{display:flex;align-items:center;gap:12px;margin:10px 0 18px}.onboarding-progress progress{width:220px;accent-color:var(--green)}.onboarding-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.onboarding-step{border:1px solid var(--line);border-radius:7px;padding:14px;margin:0;min-width:0}.onboarding-step legend{font-size:.76rem;font-weight:750;padding:0 6px}.onboarding-step .field{margin-bottom:10px}.onboarding-step .field:last-child{margin-bottom:0}.profile-actions{display:flex;align-items:center;gap:12px;margin-top:14px}.wide-field{grid-column:1/-1}.compliance-layout{display:grid;grid-template-columns:minmax(620px,1.5fr) minmax(300px,.7fr);gap:16px;align-items:start}.compliance-row{display:grid;grid-template-columns:minmax(220px,1.4fr) repeat(3,minmax(120px,.55fr)) auto;gap:10px;padding:14px 16px;border-top:1px solid var(--line);align-items:start}.compliance-row:first-child{border-top:0}.compliance-row input,.compliance-row select{width:100%;height:39px;padding:8px;border:1px solid #bfc4c0;border-radius:6px;background:white}.citation{margin-top:7px;padding:9px;background:#f7f5f0;border-left:3px solid #7d948c;font-size:.78rem}.amendment-panel{margin-bottom:16px;padding:16px}.amendment-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.amendment-change{border:1px solid var(--line);border-radius:6px;padding:12px}.document-viewer{position:sticky;top:84px;max-height:70vh;overflow:auto}.document-page{white-space:pre-wrap;font:0.8rem/1.5 ui-monospace,monospace;background:#f7f5f0;padding:12px;border-radius:6px}.hidden{display:none!important}
     @media(max-width:1050px){.opportunity-layout,.compliance-layout{grid-template-columns:1fr}.detail-card,.document-viewer{position:static}.compliance-row{grid-template-columns:1fr 1fr}.summary-strip{grid-template-columns:1fr 1fr}.summary-item:nth-child(2){border-right:0}.summary-item:nth-child(-n+2){border-bottom:1px solid var(--line)}.onboarding-grid{grid-template-columns:1fr}}
     @media(max-width:680px){.app-shell{display:block}.sidebar{position:sticky;z-index:10;width:100%;height:auto;padding:10px 14px;gap:8px}.brand small,.sidebar-footer{display:none}.brand{font-size:1rem}.nav{display:flex;overflow-x:auto}.nav a{white-space:nowrap;padding:8px}.topbar{padding:0 16px}main{padding:20px 14px}.page-heading{align-items:flex-start;flex-direction:column}.summary-strip{grid-template-columns:1fr}.summary-item{border-right:0;border-bottom:1px solid var(--line)}.opportunity-layout{display:block}.detail-card{margin-top:14px}.task-grid{grid-template-columns:1fr}.filter-form button{flex:1}.opportunity-table th:nth-child(2),.opportunity-table td:nth-child(2){display:none}}
+
+    #reviews{--review-ink:#243246;--review-line:#d9e0e9;--review-blue:#294f78}
+    #review-list{padding:0;min-width:0;container-type:inline-size}
+    .verification{padding:22px;color:var(--review-ink);overflow-wrap:anywhere}
+    .verification + .verification{border-top:1px solid var(--review-line)}
+    .verification-header{display:flex;align-items:start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    .verification-header h3{font-size:1.12rem;line-height:1.35}
+    .verification-priority{color:#734809;background:#fbf0d9;border:1px solid #ebd9ac;border-radius:5px;padding:3px 8px;font-size:.76rem;font-weight:650}
+    .verification-reason{font-size:.88rem;line-height:1.5;margin:8px 0 16px}
+    .verification-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:16px}
+    .verification-evidence{background:#f4f6f9;border:1px solid var(--review-line);border-radius:6px;padding:14px}
+    .verification h4{margin:0 0 8px;font-size:.82rem}
+    .verification blockquote{margin:0;line-height:1.55;white-space:pre-wrap}
+    .verification-source{margin:10px 0 0;font-size:.82rem;color:#526176}
+    .verification-value{margin:0 0 12px;font-size:.91rem}
+    .verification-form input{width:100%;min-width:0}
+    .verification-form .actions{margin-top:10px}
+    .verification-form button[type=submit]{background:var(--review-blue);border-color:var(--review-blue)}
+    .verification-form button[type=submit]:hover{background:#1e3c5d}
+    .verification-form .upload-state:empty{display:none}
+    @container (max-width:580px){.verification-grid{grid-template-columns:minmax(0,1fr)}}
   </style>
 </head>
 <body>
@@ -182,7 +203,7 @@ async function saveComplianceItem(event){
 async function showDocumentPage(event){
   const button=event.target.closest('[data-document-page]');
   if(!button)return;
-  const viewer=document.querySelector('#document-viewer');
+  const viewer=button.closest('.verification-evidence')?.querySelector('.verification-page')||document.querySelector('#document-viewer');
   viewer.innerHTML='<p class="empty">Loading source page…</p>';
   try{
     const pages=await authFetch(`/api/documents/${encodeURIComponent(button.dataset.documentPage)}/pages`).then(json);
@@ -289,7 +310,7 @@ async function load(){
       const changes=Object.values(item.changed_fields||{}).filter(value=>value&&typeof value==='object'&&('before' in value||'after' in value));
       return `<article class="review-row"><span class="badge">${esc(item.status)} · ${esc(item.alert_type.replaceAll('_',' '))}</span><h3>${esc(item.title)}</h3><p>${esc(item.message)}</p>${changes.length?`<ul class="plain-list">${changes.map(change=>`<li><strong>${esc(change.label||'Field')}:</strong> ${esc(change.before??'Not provided')} → ${esc(change.after??'Not provided')}</li>`).join('')}</ul>`:''}<p class="summary-copy">${esc(opportunity?.title||'Opportunity unavailable')} · ${esc(new Date(item.created_at).toLocaleString())}</p><div class="actions">${item.status==='unread'?`<button type="button" data-alert-id="${esc(item.id)}" data-alert-status="read">Mark read</button>`:''}${item.status!=='resolved'?`<button type="button" class="secondary" data-alert-id="${esc(item.id)}" data-alert-status="resolved">Resolve</button>`:''}</div></article>`;
     }).join(''):'<p class="empty">No alerts yet. Watch an opportunity to monitor deadlines and amendments.</p>';
-    document.querySelector('#review-list').innerHTML=reviews.map(review=>`<article class="review-row"><span class="badge">${esc(review.priority)} priority</span><h3>${esc(gateLabel(review.field_name))}</h3><p>${esc(review.extracted_value||'No value extracted')}</p><p class="subtle">${Math.round(finiteNumber(review.confidence)*100)}% confidence · ${esc(review.reason)}</p><p>“${esc(review.evidence?.[0]?.supporting_text||'No evidence excerpt')}”</p><div class="actions"><button type="button" data-review-action="resolve" data-review-id="${esc(review.id)}">Correct value</button><button type="button" class="secondary" data-review-action="dismiss" data-review-id="${esc(review.id)}">Dismiss</button></div></article>`).join('')||(authToken()?'<p class="empty">No pending reviews. Low-confidence fields will appear here.</p>':'<p class="empty">Sign in to view your organization’s review queue.</p>');
+    document.querySelector('#review-list').innerHTML=reviews.map(renderVerification).join('')||(authToken()?'<p class="empty">No pending reviews. Low-confidence fields will appear here.</p>':'<p class="empty">Sign in to view your organization’s review queue.</p>');
   }catch(error){
     document.querySelector('#catalog').innerHTML=`<p class="empty">${esc(error instanceof Error?error.message:'Unable to load opportunities.')}</p>`;
     document.querySelector('#matches').innerHTML=`<p class="empty">${esc(error instanceof Error?error.message:'Unable to load dashboard data.')}</p>`;
@@ -346,21 +367,71 @@ async function saveProfile(event){
   finally{button.disabled=false}
 }
 
+
+function renderVerification(review){
+  const evidence=review.evidence?.[0];
+  const reference=[evidence?.section,evidence?.page? `Page ${evidence.page}`:''].filter(Boolean).join(' · ');
+  const confidence=Math.round(finiteNumber(review.confidence)*100);
+  const inputId=`verified-value-${esc(review.id)}`;
+  return `<article class="verification">
+    <header class="verification-header">
+      <h3>${esc(gateLabel(review.field_name))}</h3>
+      <span class="verification-priority">${esc(review.priority)} priority</span>
+    </header>
+    <p class="verification-reason subtle">${confidence}% confidence · ${esc(review.reason)}</p>
+    <div class="verification-grid">
+      <section class="verification-evidence">
+        <h4>Source excerpt</h4>
+        ${evidence?.supporting_text?`<blockquote>${esc(evidence.supporting_text)}</blockquote>`:'<p class="verification-value">No evidence excerpt available.</p>'}
+        ${reference?`<p class="verification-source">${esc(reference)}</p>`:''}
+        ${evidence?.document_id&&evidence.page?`<div class="actions"><button type="button" class="secondary" data-document-page="${esc(evidence.document_id)}" data-page-number="${esc(evidence.page)}">View source page</button></div><div class="verification-page" aria-live="polite"></div>`:''}
+      </section>
+      <form class="verification-form" data-review-id="${esc(review.id)}">
+        <h4>Extracted value</h4>
+        <p class="verification-value">${esc(review.extracted_value||'No value extracted')}</p>
+        <label class="field" for="${inputId}">Verified value</label>
+        <input id="${inputId}" name="corrected_value" required>
+        <div class="actions">
+          <button type="submit">Save correction</button>
+          <button type="button" class="secondary" data-review-dismiss>Dismiss</button>
+        </div>
+        <p class="upload-state" role="status"></p>
+      </form>
+    </div>
+  </article>`;
+}
+
 async function decideReview(event){
-  const button=event.target.closest('[data-review-action]');
-  if(!button)return;
-  const action=button.dataset.reviewAction;
-  const body={};
-  if(action==='resolve'){
-    const correctedValue=prompt('Enter the verified value:');
-    if(!correctedValue?.trim())return;
-    body.corrected_value=correctedValue.trim();
-  }else if(!confirm('Dismiss this review item as not requiring a correction?'))return;
-  button.disabled=true;
+  const dismiss=event.target.closest('[data-review-dismiss]');
+  if(event.type==='click'&&!dismiss)return;
+  const form=event.target.closest('.verification-form');
+  if(!form)return;
+  event.preventDefault();
+  const status=form.querySelector('[role="status"]');
+  const buttons=Array.from(form.querySelectorAll('button'));
+  if(buttons.some(button=>button.disabled))return;
+  const action=dismiss?'dismiss':'resolve';
+  const correctedValue=form.elements.corrected_value.value.trim();
+  if(dismiss&&!confirm('Dismiss this review item as not requiring a correction?'))return;
+  if(!dismiss&&!correctedValue){
+    status.textContent='Enter a verified value.';
+    status.dataset.kind='error';
+    form.elements.corrected_value.focus();
+    return;
+  }
+  const body=dismiss?{}:{corrected_value:correctedValue};
+  buttons.forEach(button=>{button.disabled=true});
+  status.textContent='Saving decision…';
+  delete status.dataset.kind;
   try{
-    await authFetch(`/api/reviews/${encodeURIComponent(button.dataset.reviewId)}/${action}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(json);
+    await authFetch(`/api/reviews/${encodeURIComponent(form.dataset.reviewId)}/${action}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(json);
     await load();
-  }catch(error){alert(error instanceof Error?error.message:'Unable to save the review decision.');button.disabled=false}
+  }catch(error){
+    status.textContent=error instanceof Error?error.message:'Unable to save the review decision.';
+    status.dataset.kind='error';
+  }finally{
+    buttons.forEach(button=>{button.disabled=false});
+  }
 }
 
 async function addToPipeline(event){
@@ -574,7 +645,9 @@ function uploadDocument(event){
 document.querySelector('#reset-demo').addEventListener('click',resetDemo);
 document.querySelector('#profile-form').addEventListener('submit',saveProfile);
 document.querySelector('#upload-form').addEventListener('submit',uploadDocument);
+document.querySelector('#reviews').addEventListener('click',showDocumentPage);
 document.querySelector('#reviews').addEventListener('click',decideReview);
+document.querySelector('#reviews').addEventListener('submit',decideReview);
 document.querySelector('#catalog').addEventListener('click',handleAttachments);
 document.querySelector('#catalog').addEventListener('keydown',event=>{if(['Enter',' '].includes(event.key)&&event.target.matches('[data-opportunity-select]')){event.preventDefault();handleAttachments(event)}});
 document.querySelector('#matches').addEventListener('click',handleAttachments);
